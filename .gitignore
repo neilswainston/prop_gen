@@ -11,3 +11,8 @@ gym-molecule/gym_molecule.egg-info
 *.pt
 *.json
 *.sqlite3
+
+/.settings/
+/.project
+/.pydevproject
+/data/
