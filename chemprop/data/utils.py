@@ -16,72 +16,16 @@ import os
 import pickle
 import random
 
+from rdkit import Chem
 from tqdm import tqdm
 from typing import List, Set, Tuple
 
 from chemprop.features import load_features
 import numpy as np
-from rdkit import Chem
+import pandas as pd
 
 from .data import MoleculeDatapoint, MoleculeDataset
 from .scaffold import log_scaffold_stats, scaffold_split
-
-
-def get_task_names(path: str, use_compound_names: bool=False) -> List[str]:
-    """
-    Gets the task names from a data CSV file.
-
-    :param path: Path to a CSV file.
-    :param use_compound_names: Whether file has compound names in addition to
-    smiles strings.
-    :return: A list of task names.
-    """
-    index = 2 if use_compound_names else 1
-
-    return get_header(path)[index:]
-
-
-def get_header(path: str) -> List[str]:
-    """
-    Returns the header of a data CSV file.
-
-    :param path: Path to a CSV file.
-    :return: A list of strings containing the strings in the comma-separated
-    header.
-    """
-    with open(path) as f:
-        header = next(csv.reader(f))
-
-    return header
-
-
-def get_num_tasks(path: str) -> int:
-    """
-    Gets the number of tasks in a data CSV file.
-
-    :param path: Path to a CSV file.
-    :return: The number of tasks.
-    """
-    return len(get_header(path)) - 1
-
-
-def get_smiles(path: str, header: bool = True) -> List[str]:
-    """
-    Returns the smiles strings from a data CSV file (assuming the first line
-    is a header).
-
-    :param path: Path to a CSV file.
-    :param header: Whether the CSV file contains a header (that will be
-    skipped).
-    :return: A list of smiles strings.
-    """
-    with open(path) as f:
-        reader = csv.reader(f)
-        if header:
-            next(reader)  # Skip header
-        smiles = [line[0] for line in reader]
-
-    return smiles
 
 
 def filter_invalid_smiles(data: MoleculeDataset) -> MoleculeDataset:
@@ -96,8 +40,7 @@ def filter_invalid_smiles(data: MoleculeDataset) -> MoleculeDataset:
                             and datapoint.mol.GetNumHeavyAtoms()])
 
 
-def get_data(path: str,
-             skip_invalid_smiles: bool=True,
+def get_data(skip_invalid_smiles: bool=True,
              args: Namespace=None,
              features_path: List[str]=None,
              max_data_size: int=None,
@@ -144,44 +87,31 @@ def get_data(path: str,
     else:
         features_data = None
 
-    skip_smiles = set()
-
     # Load data
-    with open(path) as f:
-        reader = csv.reader(f)
-        next(reader)  # skip header
+    data = []
 
-        lines = []
-        for line in reader:
-            smiles = line[0]
+    for idx, (smiles, targets) in \
+            enumerate(args.data_df.head(min(max_data_size,
+                                            len(args.data_df))).iterrows()):
+        data.append(MoleculeDatapoint(
+            smiles=smiles,
+            targets=targets,
+            args=args,
+            features=features_data[idx] if features_data else None,
+            compound_name=None
+        ))
 
-            if smiles in skip_smiles:
-                continue
-
-            lines.append(line)
-
-            if len(lines) >= max_data_size:
-                break
-
-        data = MoleculeDataset([
-            MoleculeDatapoint(
-                line=line,
-                args=args,
-                features=features_data[i] if features_data else None,
-                use_compound_names=use_compound_names
-            ) for i, line in tqdm(enumerate(lines), total=len(lines))
-        ])
+    data = MoleculeDataset(data)
 
     # Filter out invalid SMILES
     if skip_invalid_smiles:
-        original_data_len = len(data)
+        original_len = len(data)
         data = filter_invalid_smiles(data)
 
-        if len(data) < original_data_len:
-            debug(
-                f'Warning: {original_data_len - len(data)} SMILES are invalid')
+        if len(data) < original_len:
+            debug(f'Warning: {original_len - len(data)} SMILES are invalid')
 
-    if data.data[0].features is not None:
+    if data.data[0].features:
         args.features_dim = len(data.data[0].features)
 
     return data
@@ -332,38 +262,21 @@ def split_data(data: MoleculeDataset,
     raise ValueError(f'split_type "{split_type}" not supported.')
 
 
-def get_class_sizes(data: MoleculeDataset) -> List[List[float]]:
+def get_class_sizes(data_df: pd.DataFrame) -> List[List[float]]:
     """
     Determines the proportions of the different classes in the classification
     dataset.
 
-    :param data: A classification dataset
+    :param data: A Pandas DataFrame
     :return: A list of lists of class proportions. Each inner list contains the
     class proportions
     for a task.
     """
-    targets = data.targets()
+    for col in data_df.columns:
+        assert data_df[col].dropna().isin([0, 1]).all()
 
-    # Filter out Nones
-    valid_targets = [[] for _ in range(data.num_tasks())]
-    for i, target in enumerate(targets):
-        for task_num in range(len(targets[i])):
-            if target[task_num]:
-                valid_targets[task_num].append(target[task_num])
-
-    class_sizes = []
-    for task_targets in valid_targets:
-        # Make sure we're dealing with a binary classification task
-        assert set(np.unique(task_targets)) <= {0, 1}
-
-        try:
-            ones = np.count_nonzero(task_targets) / len(task_targets)
-        except ZeroDivisionError:
-            ones = float('nan')
-            print('Warning: class has no targets')
-        class_sizes.append([1 - ones, ones])
-
-    return class_sizes
+    return pd.DataFrame([data_df[col].value_counts(normalize=True)
+                         for col in data_df.columns])
 
 
 def validate_data(data_path: str) -> Set[str]:

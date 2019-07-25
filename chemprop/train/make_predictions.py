@@ -1,15 +1,15 @@
 from argparse import Namespace
 import csv
-from typing import List, Optional
 
-import numpy as np
 import torch
 from tqdm import tqdm
+from typing import List, Optional
 
-from chemprop.train.predict import predict
 from chemprop.data import MoleculeDataset
 from chemprop.data.utils import get_data, get_data_from_smiles
+from chemprop.train.predict import predict
 from chemprop.utils import load_args, load_checkpoint, load_scalers
+import numpy as np
 
 
 def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional[List[float]]]:
@@ -34,12 +34,15 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
 
     print('Loading data')
     if smiles is not None:
-        test_data = get_data_from_smiles(smiles=smiles, skip_invalid_smiles=False)
+        test_data = get_data_from_smiles(
+            smiles=smiles, skip_invalid_smiles=False)
     else:
-        test_data = get_data(path=args.test_path, args=args, use_compound_names=args.use_compound_names, skip_invalid_smiles=False)
+        test_data = get_data(path=args.test_path, args=args,
+                             use_compound_names=args.use_compound_names, skip_invalid_smiles=False)
 
     print('Validating SMILES')
-    valid_indices = [i for i in range(len(test_data)) if test_data[i].mol is not None]
+    valid_indices = [i for i in range(
+        len(test_data)) if test_data[i].mol is not None]
     full_data = test_data
     test_data = MoleculeDataset([test_data[i] for i in valid_indices])
 
@@ -57,10 +60,12 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
 
     # Predict with each model individually and sum predictions
     if args.dataset_type == 'multiclass':
-        sum_preds = np.zeros((len(test_data), args.num_tasks, args.multiclass_num_classes))
+        sum_preds = np.zeros(
+            (len(test_data), args.num_tasks, args.multiclass_num_classes))
     else:
         sum_preds = np.zeros((len(test_data), args.num_tasks))
-    print(f'Predicting with an ensemble of {len(args.checkpoint_paths)} models')
+    print(
+        f'Predicting with an ensemble of {len(args.checkpoint_paths)} models')
     for checkpoint_path in tqdm(args.checkpoint_paths, total=len(args.checkpoint_paths)):
         # Load model
         model = load_checkpoint(checkpoint_path, cuda=args.cuda)
@@ -122,13 +127,15 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
                     row.extend(avg_preds[i])
             else:
                 if args.dataset_type == 'multiclass':
-                    row.extend([''] * args.num_tasks * args.multiclass_num_classes)
+                    row.extend([''] * args.num_tasks *
+                               args.multiclass_num_classes)
                 else:
                     row.extend([''] * args.num_tasks)
 
             writer.writerow(row)
 
     return avg_preds
+
 
 def predict_smile(checkpoint_path: str, smile: str):
     smiles = [smile]
@@ -151,13 +158,15 @@ def predict_smile(checkpoint_path: str, smile: str):
 
     # print('Loading data')
     if smiles is not None:
-        test_data = get_data_from_smiles(smiles=smiles, skip_invalid_smiles=False)
+        test_data = get_data_from_smiles(
+            smiles=smiles, skip_invalid_smiles=False)
     else:
         print("Enter Valid Smile String")
         return
 
     # print('Validating SMILES')
-    valid_indices = [i for i in range(len(test_data)) if test_data[i].mol is not None]
+    valid_indices = [i for i in range(
+        len(test_data)) if test_data[i].mol is not None]
     full_data = test_data
     test_data = MoleculeDataset([test_data[i] for i in valid_indices])
 
@@ -165,14 +174,14 @@ def predict_smile(checkpoint_path: str, smile: str):
     if len(test_data) == 0:
         return [None] * len(full_data)
 
-
     # Normalize features
     if train_args.features_scaling:
         test_data.normalize_features(features_scaler)
 
     # Predict with each model individually and sum predictions
     if args.dataset_type == 'multiclass':
-        sum_preds = np.zeros((len(test_data), args.num_tasks, args.multiclass_num_classes))
+        sum_preds = np.zeros(
+            (len(test_data), args.num_tasks, args.multiclass_num_classes))
     else:
         sum_preds = np.zeros((len(test_data), args.num_tasks))
 
@@ -188,7 +197,4 @@ def predict_smile(checkpoint_path: str, smile: str):
     # Ensemble predictions
     return sum_preds[0][0]
 
-#Debug
-
-
-print(predict_smile("model_hyperopt.pt","N=C(N)N=C(N)C(CC=CN)=C(N)O"))
+# Debug

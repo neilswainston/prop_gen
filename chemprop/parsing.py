@@ -7,6 +7,7 @@ All rights reserved.
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-statements
+# pylint: disable=wrong-import-order
 from argparse import ArgumentParser, Namespace
 import json
 import os
@@ -17,6 +18,7 @@ import torch
 
 from chemprop.features import get_available_features_generators
 from chemprop.utils import makedirs
+import pandas as pd
 
 
 # Prevents the temporary directory from being deleted upon function return
@@ -322,6 +324,11 @@ def modify_train_args(args: Namespace):
 
     assert args.data_path is not None
     assert args.dataset_type is not None
+
+    args.data_df = pd.read_csv(args.data_path, index_col=0)
+    
+    # TODO: remove duplicate SMILES strings.
+    # del args.data_path
 
     if args.save_dir is not None:
         makedirs(args.save_dir)

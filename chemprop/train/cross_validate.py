@@ -11,10 +11,8 @@ import os
 
 from typing import Tuple
 
-from chemprop.data.utils import get_task_names
 from chemprop.utils import makedirs
 import numpy as np
-
 from .run_training import run_training
 
 
@@ -26,7 +24,7 @@ def cross_validate(args: Namespace, logger: Logger=None) \
     # Initialize relevant variables
     init_seed = args.seed
     save_dir = args.save_dir
-    task_names = get_task_names(args.data_path)
+    task_names = args.data_df.columns
 
     # Run training on different random seeds for each fold
     all_scores = []

@@ -4,7 +4,9 @@
 All rights reserved.
 '''
 # pylint: disable=invalid-name
+# pylint: disable=too-many-branches
 # pylint: disable=too-many-locals
+# pylint: disable=too-many-statements
 # pylint: disable=wrong-import-order
 from argparse import Namespace
 import csv
@@ -14,20 +16,19 @@ import pickle
 from pprint import pformat
 
 from tensorboardX import SummaryWriter
+import torch
+from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import trange
 from typing import List
 
 from chemprop.data import StandardScaler
-from chemprop.data.utils import get_class_sizes, get_data, get_task_names, \
-    split_data
+from chemprop.data.utils import get_class_sizes, get_data, split_data
 from chemprop.models import build_model
 from chemprop.nn_utils import param_count
 from chemprop.utils import build_optimizer, build_lr_scheduler, \
     get_loss_func, get_metric_func, load_checkpoint, makedirs, save_checkpoint
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from torch.optim.lr_scheduler import ExponentialLR
 
 from .evaluate import evaluate, evaluate_predictions
 from .predict import predict
@@ -58,10 +59,10 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
 
     # Get data
     debug('Loading data')
-    args.task_names = get_task_names(args.data_path)
-    data = get_data(path=args.data_path, args=args, logger=logger)
+    args.task_names = args.data_df.columns
+    data = get_data(args=args, logger=logger)
     args.num_tasks = data.num_tasks()
-    args.features_size = data.features_size()
+    args.features_size = len(args.data_df.columns)
     debug(f'Number of tasks = {args.num_tasks}')
 
     # Split data
@@ -101,11 +102,9 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
             logger=logger)
 
     if args.dataset_type == 'classification':
-        class_sizes = get_class_sizes(data)
+        class_sizes = get_class_sizes(args.data_df)
         debug('Class sizes')
-        for i, task_class_sizes in enumerate(class_sizes):
-            debug(f'{args.task_names[i]} '
-                  f'{", ".join(f"{cls}: {size * 100:.2f}%" for cls, size in enumerate(task_class_sizes))}')
+        debug(class_sizes)
 
     if args.save_smiles_splits:
         with open(args.data_path, 'r') as f:

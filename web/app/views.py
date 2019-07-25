@@ -4,31 +4,36 @@ from argparse import ArgumentParser, Namespace
 from functools import wraps
 import io
 import os
-import sys
 import shutil
+import sys
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 import time
-from typing import Callable, List, Tuple
-import multiprocessing as mp
 import zipfile
 
-from flask import json, jsonify, redirect, render_template, request, send_file, send_from_directory, url_for
-import numpy as np
+from flask import json, jsonify, redirect, render_template, request, \
+    send_file, send_from_directory, url_for
 from rdkit import Chem
+from typing import Callable, List, Tuple
 from werkzeug.utils import secure_filename
 
 from app import app, db
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
-
-from chemprop.data.utils import get_data, get_header, get_smiles, validate_data
-from chemprop.parsing import add_predict_args, add_train_args, modify_predict_args, modify_train_args
+from chemprop.data.csv_parser import get_header, get_smiles
+from chemprop.data.utils import get_data, validate_data
+from chemprop.parsing import add_predict_args, add_train_args, \
+    modify_predict_args, modify_train_args
 from chemprop.train.make_predictions import make_predictions
 from chemprop.train.run_training import run_training
 from chemprop.utils import create_logger, load_task_names, load_args
+import multiprocessing as mp
+import numpy as np
+
+
+sys.path.append(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.realpath(__file__)))))
 
 TRAINING = 0
 PROGRESS = mp.Value('d', 0.0)
+
 
 def check_not_demo(func: Callable) -> Callable:
     """
@@ -44,6 +49,7 @@ def check_not_demo(func: Callable) -> Callable:
         return func(*args, **kwargs)
 
     return decorated_function
+
 
 def progress_bar(args: Namespace, progress: mp.Value):
     """
@@ -135,6 +141,7 @@ def format_float_list(array: List[float], precision: int = 4) -> List[str]:
     """
     return [format_float(f, precision) for f in array]
 
+
 @app.route('/receiver', methods=['POST'])
 @check_not_demo
 def receiver():
@@ -147,6 +154,7 @@ def home():
     """Renders the home page."""
     return render_template('home.html', users=db.get_all_users())
 
+
 @app.route('/create_user', methods=['GET', 'POST'])
 @check_not_demo
 def create_user():
@@ -154,7 +162,7 @@ def create_user():
     If a POST request is made, creates a new user.
     Renders the create_user page.
     """
-    if request.method == 'GET':   
+    if request.method == 'GET':
         return render_template('create_user.html', users=db.get_all_users())
 
     new_name = request.form['newUserName']
@@ -164,18 +172,22 @@ def create_user():
 
     return redirect(url_for('create_user'))
 
+
 def render_train(**kwargs):
     """Renders the train page with specified kwargs."""
-    data_upload_warnings, data_upload_errors = get_upload_warnings_errors('data')
+    data_upload_warnings, data_upload_errors = get_upload_warnings_errors(
+        'data')
 
     return render_template('train.html',
-                           datasets=db.get_datasets(request.cookies.get('currentUser')),
+                           datasets=db.get_datasets(
+                               request.cookies.get('currentUser')),
                            cuda=app.config['CUDA'],
                            gpus=app.config['GPUS'],
                            data_upload_warnings=data_upload_warnings,
                            data_upload_errors=data_upload_errors,
                            users=db.get_all_users(),
                            **kwargs)
+
 
 @app.route('/train', methods=['GET', 'POST'])
 @check_not_demo
@@ -209,15 +221,18 @@ def train():
     # Check if regression/classification selection matches data
     data = get_data(path=data_path)
     targets = data.targets()
-    unique_targets = {target for row in targets for target in row if target is not None}
+    unique_targets = {
+        target for row in targets for target in row if target is not None}
 
     if dataset_type == 'classification' and len(unique_targets - {0, 1}) > 0:
-        errors.append('Selected classification dataset but not all labels are 0 or 1. Select regression instead.')
+        errors.append(
+            'Selected classification dataset but not all labels are 0 or 1. Select regression instead.')
 
         return render_train(warnings=warnings, errors=errors)
 
     if dataset_type == 'regression' and unique_targets <= {0, 1}:
-        errors.append('Selected regression dataset but all labels are 0 or 1. Select classification instead.')
+        errors.append(
+            'Selected regression dataset but all labels are 0 or 1. Select classification instead.')
 
         return render_train(warnings=warnings, errors=errors)
 
@@ -249,7 +264,8 @@ def train():
         TRAINING = 1
 
         # Run training
-        logger = create_logger(name='train', save_dir=args.save_dir, quiet=args.quiet)
+        logger = create_logger(
+            name='train', save_dir=args.save_dir, quiet=args.quiet)
         task_scores = run_training(args, logger)
         process.join()
 
@@ -259,15 +275,18 @@ def train():
 
         # Check if name overlap
         if checkpoint_name != ckpt_name:
-            warnings.append(name_already_exists_message('Checkpoint', checkpoint_name, ckpt_name))
+            warnings.append(name_already_exists_message(
+                'Checkpoint', checkpoint_name, ckpt_name))
 
         # Move models
         for root, _, files in os.walk(args.save_dir):
             for fname in files:
                 if fname.endswith('.pt'):
                     model_id = db.insert_model(ckpt_id)
-                    save_path = os.path.join(app.config['CHECKPOINT_FOLDER'], f'{model_id}.pt')
-                    shutil.move(os.path.join(args.save_dir, root, fname), save_path)
+                    save_path = os.path.join(
+                        app.config['CHECKPOINT_FOLDER'], f'{model_id}.pt')
+                    shutil.move(os.path.join(
+                        args.save_dir, root, fname), save_path)
 
     return render_train(trained=True,
                         metric=args.metric,
@@ -281,10 +300,12 @@ def train():
 
 def render_predict(**kwargs):
     """Renders the predict page with specified kwargs"""
-    checkpoint_upload_warnings, checkpoint_upload_errors = get_upload_warnings_errors('checkpoint')
+    checkpoint_upload_warnings, checkpoint_upload_errors = get_upload_warnings_errors(
+        'checkpoint')
 
     return render_template('predict.html',
-                           checkpoints=db.get_ckpts(request.cookies.get('currentUser')),
+                           checkpoints=db.get_ckpts(
+                               request.cookies.get('currentUser')),
                            cuda=app.config['CUDA'],
                            gpus=app.config['GPUS'],
                            checkpoint_upload_warnings=checkpoint_upload_warnings,
@@ -316,13 +337,15 @@ def predict():
 
         # Check if header is smiles
         possible_smiles = get_header(data_path)[0]
-        smiles = [possible_smiles] if Chem.MolFromSmiles(possible_smiles) is not None else []
+        smiles = [possible_smiles] if Chem.MolFromSmiles(
+            possible_smiles) is not None else []
 
         # Get remaining smiles
         smiles.extend(get_smiles(data_path))
 
     models = db.get_models(ckpt_id)
-    model_paths = [os.path.join(app.config['CHECKPOINT_FOLDER'], f'{model["id"]}.pt') for model in models]
+    model_paths = [os.path.join(
+        app.config['CHECKPOINT_FOLDER'], f'{model["id"]}.pt') for model in models]
 
     task_names = load_task_names(model_paths[0])
     num_tasks = len(task_names)
@@ -333,8 +356,10 @@ def predict():
     add_predict_args(parser)
     args = parser.parse_args([])
 
-    preds_path = os.path.join(app.config['TEMP_FOLDER'], app.config['PREDICTIONS_FILENAME'])
-    args.test_path = 'None'  # TODO: Remove this hack to avoid assert crashing in modify_predict_args
+    preds_path = os.path.join(
+        app.config['TEMP_FOLDER'], app.config['PREDICTIONS_FILENAME'])
+    # TODO: Remove this hack to avoid assert crashing in modify_predict_args
+    args.test_path = 'None'
     args.preds_path = preds_path
     args.checkpoint_paths = model_paths
     if gpu is not None:
@@ -353,16 +378,18 @@ def predict():
 
     # Replace invalid smiles with message
     invalid_smiles_warning = "Invalid SMILES String"
-    preds = [pred if pred is not None else [invalid_smiles_warning] * num_tasks for pred in preds]
+    preds = [pred if pred is not None else [
+        invalid_smiles_warning] * num_tasks for pred in preds]
 
     return render_predict(predicted=True,
                           smiles=smiles,
                           num_smiles=min(10, len(smiles)),
-                          show_more=max(0, len(smiles)-10),
+                          show_more=max(0, len(smiles) - 10),
                           task_names=task_names,
                           num_tasks=len(task_names),
                           preds=preds,
-                          warnings=["List contains invalid SMILES strings"] if None in preds else None,
+                          warnings=[
+                              "List contains invalid SMILES strings"] if None in preds else None,
                           errors=["No SMILES strings given"] if len(preds) == 0 else None)
 
 
@@ -376,10 +403,12 @@ def download_predictions():
 @check_not_demo
 def data():
     """Renders the data page."""
-    data_upload_warnings, data_upload_errors = get_upload_warnings_errors('data')
+    data_upload_warnings, data_upload_errors = get_upload_warnings_errors(
+        'data')
 
     return render_template('data.html',
-                           datasets=db.get_datasets(request.cookies.get('currentUser')),
+                           datasets=db.get_datasets(
+                               request.cookies.get('currentUser')),
                            data_upload_warnings=data_upload_warnings,
                            data_upload_errors=data_upload_errors,
                            users=db.get_all_users())
@@ -411,14 +440,18 @@ def upload_data(return_page: str):
             errors.extend(dataset_errors)
         else:
             dataset_name = request.form['datasetName']
-            # dataset_class = load_args(ckpt).dataset_type  # TODO: SWITCH TO ACTUALLY FINDING THE CLASS
+            # dataset_class = load_args(ckpt).dataset_type  # TODO: SWITCH TO
+            # ACTUALLY FINDING THE CLASS
 
-            dataset_id, new_dataset_name = db.insert_dataset(dataset_name, current_user, 'UNKNOWN')
+            dataset_id, new_dataset_name = db.insert_dataset(
+                dataset_name, current_user, 'UNKNOWN')
 
-            dataset_path = os.path.join(app.config['DATA_FOLDER'], f'{dataset_id}.csv')
+            dataset_path = os.path.join(
+                app.config['DATA_FOLDER'], f'{dataset_id}.csv')
 
             if dataset_name != new_dataset_name:
-                warnings.append(name_already_exists_message('Data', dataset_name, new_dataset_name))
+                warnings.append(name_already_exists_message(
+                    'Data', dataset_name, new_dataset_name))
 
             shutil.copy(temp_file.name, dataset_path)
 
@@ -455,10 +488,12 @@ def delete_data(dataset: int):
 @check_not_demo
 def checkpoints():
     """Renders the checkpoints page."""
-    checkpoint_upload_warnings, checkpoint_upload_errors = get_upload_warnings_errors('checkpoint')
+    checkpoint_upload_warnings, checkpoint_upload_errors = get_upload_warnings_errors(
+        'checkpoint')
 
     return render_template('checkpoints.html',
-                           checkpoints=db.get_ckpts(request.cookies.get('currentUser')),
+                           checkpoints=db.get_ckpts(
+                               request.cookies.get('currentUser')),
                            checkpoint_upload_warnings=checkpoint_upload_warnings,
                            checkpoint_upload_errors=checkpoint_upload_errors,
                            users=db.get_all_users())
@@ -499,10 +534,12 @@ def upload_checkpoint(return_page: str):
 
         model_id = db.insert_model(ckpt_id)
 
-        model_path = os.path.join(app.config['CHECKPOINT_FOLDER'], f'{model_id}.pt')
+        model_path = os.path.join(
+            app.config['CHECKPOINT_FOLDER'], f'{model_id}.pt')
 
         if ckpt_name != new_ckpt_name:
-            warnings.append(name_already_exists_message('Checkpoint', ckpt_name, new_ckpt_name))
+            warnings.append(name_already_exists_message(
+                'Checkpoint', ckpt_name, new_ckpt_name))
 
         shutil.copy(temp_file.name, model_path)
 
@@ -519,14 +556,15 @@ def download_checkpoint(checkpoint: int):
 
     :param checkpoint: The name of the checkpoint to download.
     """
-    ckpt = db.query_db(f'SELECT * FROM ckpt WHERE id = {checkpoint}', one = True)
+    ckpt = db.query_db(f'SELECT * FROM ckpt WHERE id = {checkpoint}', one=True)
     models = db.get_models(checkpoint)
 
     model_data = io.BytesIO()
 
     with zipfile.ZipFile(model_data, mode='w') as z:
         for model in models:
-            model_path = os.path.join(app.config['CHECKPOINT_FOLDER'], f'{model["id"]}.pt')
+            model_path = os.path.join(
+                app.config['CHECKPOINT_FOLDER'], f'{model["id"]}.pt')
             z.write(model_path, os.path.basename(model_path))
 
     model_data.seek(0)
@@ -538,6 +576,7 @@ def download_checkpoint(checkpoint: int):
         attachment_filename=f'{ckpt["ckpt_name"]}.zip',
         cache_timeout=-1
     )
+
 
 @app.route('/checkpoints/delete/<int:checkpoint>')
 @check_not_demo
