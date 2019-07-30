@@ -250,20 +250,24 @@ class BatchMolGraph:
 
     def __init__(self, mol_graphs: List[MolGraph], args: Namespace):
         self.smiles_batch = [mol_graph.smiles for mol_graph in mol_graphs]
-        self.n_mols = len(self.smiles_batch)
+        self.n_mols = len(mol_graphs)
 
         self.atom_fdim = get_atom_fdim()
+
         self.bond_fdim = get_bond_fdim() \
             + (not args.atom_messages) * self.atom_fdim
 
         # Start n_atoms and n_bonds at 1 b/c zero padding
         # number of atoms (start at 1 b/c need index 0 as padding)
         self.n_atoms = 1
+
         # number of bonds (start at 1 b/c need index 0 as padding)
         self.n_bonds = 1
+
         # list of tuples indicating (start_atom_index, num_atoms) for each
         # molecule
         self.a_scope = []
+
         # list of tuples indicating (start_bond_index, num_bonds) for each
         # molecule
         self.b_scope = []
@@ -272,7 +276,9 @@ class BatchMolGraph:
         # returns zeros
         f_atoms = [[0] * self.atom_fdim]  # atom features
         f_bonds = [[0] * self.bond_fdim]  # combined atom/bond features
+
         a2b = [[]]  # mapping from atom index to incoming bond indices
+
         # mapping from bond index to the index of the atom the bond is coming
         # from
         b2a = [0]
@@ -301,9 +307,11 @@ class BatchMolGraph:
 
         self.f_atoms = torch.FloatTensor(f_atoms)
         self.f_bonds = torch.FloatTensor(f_bonds)
+
         self.a2b = torch.LongTensor(
             [a2b[a] + [0] * (self.max_num_bonds - len(a2b[a]))
              for a in range(self.n_atoms)])
+
         self.b2a = torch.LongTensor(b2a)
         self.b2revb = torch.LongTensor(b2revb)
         self.b2b = None  # try to avoid computing b2b b/c O(n_atoms^3)
@@ -333,7 +341,6 @@ class BatchMolGraph:
         :return: A PyTorch tensor containing the mapping from each bond index
         to all the incoming bond indices.
         '''
-
         if self.b2b is None:
             b2b = self.a2b[self.b2a]  # num_bonds x max_num_bonds
             # b2b includes reverse edge for each bond so need to mask out
@@ -373,13 +380,16 @@ def mol2graph(smiles_batch: List[str],
     molecules
     '''
     mol_graphs = []
+
     for smiles in smiles_batch:
         if smiles in SMILES_TO_GRAPH:
             mol_graph = SMILES_TO_GRAPH[smiles]
         else:
             mol_graph = MolGraph(smiles, args)
+
             if not args.no_cache:
                 SMILES_TO_GRAPH[smiles] = mol_graph
+
         mol_graphs.append(mol_graph)
 
     return BatchMolGraph(mol_graphs, args)

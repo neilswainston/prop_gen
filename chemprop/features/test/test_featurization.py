@@ -10,7 +10,8 @@ import unittest
 from rdkit import Chem
 
 from chemprop.features.featurization import atom_features, bond_features, \
-    get_atom_fdim, get_bond_fdim, onek_encoding_unk, MolGraph, ATOM_FEATURES
+    get_atom_fdim, get_bond_fdim, onek_encoding_unk, mol2graph, MolGraph, \
+    ATOM_FEATURES
 
 
 class Test(unittest.TestCase):
@@ -140,6 +141,35 @@ class Test(unittest.TestCase):
         self.assertEqual(mol_graph.a2b, [[1], [0, 3], [2]])
         self.assertEqual(mol_graph.b2a, [0, 1, 1, 2])
         self.assertEqual(mol_graph.b2revb, [1, 0, 3, 2])
+
+    def test_mol2graph(self):
+        '''Test mol2graph method.'''
+        args = argparse.Namespace()
+        args.atom_messages = False
+        args.no_cache = True
+
+        batch_mol_graph = mol2graph(['C(=O)=O', 'CCO'], args)
+
+        f_atoms, f_bonds, a2b, b2a, b2revb, a_scope, b_scope = \
+            batch_mol_graph.get_components()
+
+        self.assertEqual(len(f_atoms), 7)
+        self.assertEqual(len(f_bonds), 9)
+        self.assertEqual(a2b.data.numpy().tolist(), [[0, 0],
+                                                     [2, 4],
+                                                     [1, 0],
+                                                     [3, 0],
+                                                     [6, 0],
+                                                     [5, 8],
+                                                     [7, 0]])
+        self.assertEqual(b2a.data.numpy().tolist(),
+                         [0, 1, 2, 1, 3, 4, 5, 5, 6])
+
+        self.assertEqual(b2revb.data.numpy().tolist(),
+                         [0, 2, 1, 4, 3, 6, 5, 8, 7])
+
+        self.assertEqual(a_scope, [(1, 3), (4, 3)])
+        self.assertEqual(b_scope, [(1, 4), (5, 4)])
 
 
 if __name__ == "__main__":
