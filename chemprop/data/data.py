@@ -6,7 +6,6 @@ All rights reserved.
 # pylint: disable=invalid-name
 # pylint: disable=too-many-arguments
 # pylint: disable=wrong-import-order
-from argparse import Namespace
 import random
 
 from rdkit import Chem
@@ -20,180 +19,160 @@ from .scaler import StandardScaler
 
 
 class MoleculeDatapoint:
-    """
+    '''
     A MoleculeDatapoint contains a single molecule and its associated features
     and targets.
-    """
+    '''
 
     def __init__(self,
                  smiles: str,
                  targets: np.ndarray,
-                 args: Namespace = None,
                  features: np.ndarray = None,
+                 features_generator: List[str] = None,
                  compound_name: str = None):
-        """
+        '''
         Initializes a MoleculeDatapoint, which contains a single molecule.
 
         :param smiles: Smiles string
         :param targets: A numpy array containing features
-        :param args: Arguments.
-        :param features: A numpy array containing additional features (ex.
-        Morgan fingerprint).
+        :param features: A numpy array containing additional features
+        (e.g. ƒMorgan fingerprint).
+        :param features_generator: List of strings of features_generator names.
         :param use_compound_names: Whether the data CSV includes the compound
         name on each line.
-        """
-        if args:
-            self.features_generator = args.features_generator
-            self.args = args
-        else:
-            self.features_generator = self.args = None
+        '''
+        self.smiles = smiles
+        self.mol = Chem.MolFromSmiles(self.smiles)
+        self.compound_name = compound_name
 
-        if features is not None and self.features_generator is not None:
+        if features and features_generator:
             raise ValueError('Currently cannot provide both loaded features'
                              ' and a features generator.')
 
-        self.features = features
+        if features_generator:
+            # Generate additional features if given a generator:
+            features = []
 
-        self.compound_name = compound_name
-
-        self.smiles = smiles  # str
-        self.mol = Chem.MolFromSmiles(self.smiles)
-
-        # Generate additional features if given a generator
-        if self.features_generator:
-            self.features = []
-
-            for fg in self.features_generator:
+            for fg in features_generator:
                 features_generator = get_features_generator(fg)
+
                 if self.mol and self.mol.GetNumHeavyAtoms():
                     self.features.extend(features_generator(self.mol))
 
-            self.features = np.array(self.features)
+            features = np.array(self.features)
 
-        # Fix nans in features
-        if self.features:
-            replace_token = 0
-            self.features = np.where(
-                np.isnan(self.features), replace_token, self.features)
-
-        # Create targets
-        self.targets = targets
+        self.set_features(features)
+        self.set_targets(targets)
 
     def set_features(self, features: np.ndarray):
-        """
+        '''
         Sets the features of the molecule.
 
         :param features: A 1-D numpy array of features for the molecule.
-        """
+        '''
         self.features = features
 
-    def num_tasks(self) -> int:
-        """
-        Returns the number of prediction tasks.
-
-        :return: The number of tasks.
-        """
-        return len(self.targets)
+        # Fix NaNs in features:
+        if self.features:
+            self.features = np.where(np.isnan(self.features), 0, self.features)
 
     def set_targets(self, targets: List[float]):
-        """
+        '''
         Sets the targets of a molecule.
 
         :param targets: A list of floats containing the targets.
-        """
+        '''
         self.targets = targets
 
 
 class MoleculeDataset(Dataset):
-    """
+    '''
     A MoleculeDataset contains a list of molecules and their associated
     features and targets.
-    """
+    '''
 
     def __init__(self, data: List[MoleculeDatapoint]):
-        """
+        '''
         Initializes a MoleculeDataset, which contains a list of
         MoleculeDatapoints (i.e. a list of molecules).
 
         :param data: A list of MoleculeDatapoints.
-        """
+        '''
         self.data = data
-        self.args = self.data[0].args if self.data else None
-        self.scaler = None
 
     def compound_names(self) -> List[str]:
-        """
+        '''
         Returns the compound names associated with the molecule (if they
         exist).
 
         :return: A list of compound names or None if the dataset does not
         contain compound names.
-        """
+        '''
         if not self.data or not self.data[0].compound_name:
             return None
 
         return [d.compound_name for d in self.data]
 
     def smiles(self) -> List[str]:
-        """
+        '''
         Returns the smiles strings associated with the molecules.
 
         :return: A list of smiles strings.
-        """
+        '''
         return [d.smiles for d in self.data]
 
     def mols(self) -> List[Chem.Mol]:
-        """
+        '''
         Returns the RDKit molecules associated with the molecules.
 
         :return: A list of RDKit Mols.
-        """
+        '''
         return [d.mol for d in self.data]
 
     def features(self) -> List[np.ndarray]:
-        """
+        '''
         Returns the features associated with each molecule (if they exist).
 
         :return: A list of 1D numpy arrays containing the features for each
         molecule or None if there are no features.
-        """
+        '''
         if not self.data or not self.data[0].features:
             return None
 
         return [d.features for d in self.data]
 
     def targets(self) -> List[List[float]]:
-        """
+        '''
         Returns the targets associated with each molecule.
 
         :return: A list of lists of floats containing the targets.
-        """
+        '''
         return [d.targets for d in self.data]
 
     def num_tasks(self) -> int:
-        """
+        '''
         Returns the number of prediction tasks.
 
         :return: The number of tasks.
-        """
-        return self.data[0].num_tasks() if self.data else None
+        '''
+        return len(self.data[0].targets) if self.data else None
 
     def features_size(self) -> int:
-        """
+        '''
         Returns the size of the features array associated with each molecule.
 
         :return: The size of the features.
-        """
+        '''
         return len(self.data[0].features) \
             if self.data and self.data[0].features \
             else None
 
     def shuffle(self, seed: int=None):
-        """
+        '''
         Shuffles the dataset.
 
         :param seed: Optional random seed.
-        """
+        '''
         if seed:
             random.seed(seed)
 
@@ -201,7 +180,7 @@ class MoleculeDataset(Dataset):
 
     def normalize_features(self, scaler: StandardScaler=None,
                            replace_nan_token: int=0) -> StandardScaler:
-        """
+        '''
         Normalizes the features of the dataset using a StandardScaler
         (subtract mean, divide by standard deviation).
 
@@ -214,59 +193,58 @@ class MoleculeDataset(Dataset):
         :param replace_nan_token: What to replace nans with.
         :return: A fitted StandardScaler. If a scaler is provided, this is the
         same scaler. Otherwise, this is a scaler fit on this dataset.
-        """
+        '''
         if not self.data or not self.data[0].features:
             return None
 
-        if scaler is not None:
-            self.scaler = scaler
+        if not scaler:
+            scaler = StandardScaler(replace_nan_token=replace_nan_token)
 
-        elif self.scaler is None:
-            features = np.vstack([d.features for d in self.data])
-            self.scaler = StandardScaler(replace_nan_token=replace_nan_token)
-            self.scaler.fit(features)
+        features = np.vstack([d.features for d in self.data])
+        scaler.fit(features)
 
         for d in self.data:
-            d.set_features(self.scaler.transform(d.features.reshape(1, -1))[0])
+            d.set_features(scaler.transform(d.features.reshape(1, -1))[0])
 
-        return self.scaler
+        return scaler
 
     def set_targets(self, targets: List[List[float]]):
-        """
+        '''
         Sets the targets for each molecule in the dataset. Assumes the targets
         are aligned with the datapoints.
 
         :param targets: A list of lists of floats containing targets for each
         molecule. This must be the same length as the underlying dataset.
-        """
+        '''
         assert len(self.data) == len(targets)
-        for i in range(len(self.data)):
-            self.data[i].set_targets(targets[i])
+
+        for i, d in enumerate(self.data):
+            d.set_targets(targets[i])
 
     def sort(self, key: Callable):
-        """
+        '''
         Sorts the dataset using the provided key.
 
         :param key: A function on a MoleculeDatapoint to determine the sorting
         order.
-        """
+        '''
         self.data.sort(key=key)
 
     def __len__(self) -> int:
-        """
+        '''
         Returns the length of the dataset (i.e. the number of molecules).
 
         :return: The length of the dataset.
-        """
+        '''
         return len(self.data)
 
     def __getitem__(self, item) \
             -> Union[MoleculeDatapoint, List[MoleculeDatapoint]]:
-        """
+        '''
         Gets one or more MoleculeDatapoints via an index or slice.
 
         :param item: An index (int) or a slice object.
         :return: A MoleculeDatapoint if an int is provided or a list of
         MoleculeDatapoints if a slice is provided.
-        """
+        '''
         return self.data[item]

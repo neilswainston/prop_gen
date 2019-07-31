@@ -143,7 +143,7 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
             pickle.dump(all_split_indices, f)
 
     if args.features_scaling:
-        features_scaler = train_data.normalize_features(replace_nan_token=0)
+        features_scaler = train_data.normalize_features()
         val_data.normalize_features(features_scaler)
         test_data.normalize_features(features_scaler)
     else:

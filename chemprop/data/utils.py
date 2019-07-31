@@ -15,10 +15,10 @@ from logging import Logger
 import os
 import pickle
 import random
-from typing import List, Set, Tuple
 
 from rdkit import Chem
 from tqdm import tqdm
+from typing import List, Set, Tuple
 
 from chemprop.features import load_features
 import numpy as np
@@ -96,8 +96,8 @@ def get_data(skip_invalid_smiles: bool=True,
         data.append(MoleculeDatapoint(
             smiles=smiles,
             targets=targets,
-            args=args,
             features=features_data[idx] if features_data else None,
+            features_generator=args.features_generator,
             compound_name=None
         ))
 
