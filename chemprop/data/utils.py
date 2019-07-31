@@ -10,15 +10,13 @@ All rights reserved.
 # pylint: disable=too-many-statements
 # pylint: disable=wrong-import-order
 from argparse import Namespace
-import csv
+
 from logging import Logger
 import os
 import pickle
 import random
-
 from rdkit import Chem
-from tqdm import tqdm
-from typing import List, Set, Tuple
+from typing import List, Tuple
 
 from chemprop.features import load_features
 import numpy as np
@@ -28,24 +26,11 @@ from .data import MoleculeDatapoint, MoleculeDataset
 from .scaffold import log_scaffold_stats, scaffold_split
 
 
-def filter_invalid_smiles(data: MoleculeDataset) -> MoleculeDataset:
-    """
-    Filters out invalid SMILES.
-
-    :param data: A MoleculeDataset.
-    :return: A MoleculeDataset with only valid molecules.
-    """
-    return MoleculeDataset([datapoint for datapoint in data
-                            if datapoint.smiles and datapoint.mol
-                            and datapoint.mol.GetNumHeavyAtoms()])
-
-
 def get_data(skip_invalid_smiles: bool=True,
              args: Namespace=None,
              features_path: List[str]=None,
              max_data_size: int=None,
-             use_compound_names: bool=None,
-             logger: Logger=None) -> MoleculeDataset:
+             use_compound_names: bool=None) -> MoleculeDataset:
     """
     Gets smiles string and target values (and optionally compound names if
     provided) from a CSV file.
@@ -63,8 +48,6 @@ def get_data(skip_invalid_smiles: bool=True,
     along with other info such as additional features and compound names when
     desired.
     """
-    debug = logger.debug if logger is not None else print
-
     if args is not None:
         # Prefer explicit function arguments but default to args if not
         # provided
@@ -93,32 +76,25 @@ def get_data(skip_invalid_smiles: bool=True,
     for idx, (smiles, targets) in \
             enumerate(args.data_df.head(min(max_data_size,
                                             len(args.data_df))).iterrows()):
-        data.append(MoleculeDatapoint(
-            smiles=smiles,
-            targets=targets,
-            features=features_data[idx] if features_data else None,
-            features_generator=args.features_generator,
-            compound_name=None
-        ))
 
-    data = MoleculeDataset(data)
+        if smiles:
+            mol = Chem.MolFromSmiles(smiles)
 
-    # Filter out invalid SMILES
-    if skip_invalid_smiles:
-        original_len = len(data)
-        data = filter_invalid_smiles(data)
+        if not skip_invalid_smiles or (mol and mol.GetNumHeavyAtoms()):
+            data.append(MoleculeDatapoint(
+                smiles=smiles,
+                mol=mol,
+                targets=targets,
+                features=features_data[idx] if features_data else None,
+                features_generator=args.features_generator,
+                compound_name=None
+            ))
 
-        if len(data) < original_len:
-            debug(f'Warning: {original_len - len(data)} SMILES are invalid')
-
-    if data.data[0].features:
-        args.features_dim = len(data.data[0].features)
-
-    return data
+    return MoleculeDataset(data)
 
 
-def get_data_from_smiles(smiles: List[str], skip_invalid_smiles: bool=True,
-                         logger: Logger=None) -> MoleculeDataset:
+def get_data_from_smiles(smiles: List[str], skip_invalid_smiles: bool=True) \
+        -> MoleculeDataset:
     """
     Converts SMILES to a MoleculeDataset.
 
@@ -127,21 +103,17 @@ def get_data_from_smiles(smiles: List[str], skip_invalid_smiles: bool=True,
     :param logger: Logger.
     :return: A MoleculeDataset with all of the provided SMILES.
     """
-    debug = logger.debug if logger is not None else print
+    data = []
 
-    data = MoleculeDataset([MoleculeDatapoint(smile, None)
-                            for smile in smiles])
+    for smile in smiles:
+        if smile:
+            mol = Chem.MolFromSmiles(smiles)
 
-    # Filter out invalid SMILES
-    if skip_invalid_smiles:
-        original_data_len = len(data)
-        data = filter_invalid_smiles(data)
+            if not skip_invalid_smiles or (mol and mol.GetNumHeavyAtoms()):
+                data.append((smile, mol))
 
-        if len(data) < original_data_len:
-            debug(
-                f'Warning: {original_data_len - len(data)} SMILES are invalid')
-
-    return data
+    return MoleculeDataset([MoleculeDatapoint(d[0], d[1], None)
+                            for d in data])
 
 
 def split_data(data: MoleculeDataset,
@@ -278,64 +250,3 @@ def get_class_sizes(data_df: pd.DataFrame) -> List[List[float]]:
 
     return pd.DataFrame([data_df[col].value_counts(normalize=True)
                          for col in data_df.columns])
-
-
-def validate_data(data_path: str) -> Set[str]:
-    """
-    Validates a data CSV file, returning a set of errors.
-
-    :param data_path: Path to a data CSV file.
-    :return: A set of error messages.
-    """
-    errors = set()
-
-    with open(data_path) as f:
-        reader = csv.reader(f)
-        header = next(reader)
-
-        smiles, targets = [], []
-        for line in reader:
-            smiles.append(line[0])
-            targets.append(line[1:])
-
-    # Validate header
-    if not header:
-        errors.add('Empty header')
-    elif len(header) < 2:
-        errors.add('Header must include task names.')
-
-    if Chem.MolFromSmiles(header[0]):
-        errors.add('First row is a SMILES string instead of a header.')
-
-    # Validate smiles
-    for smile in tqdm(smiles, total=len(smiles)):
-        if not Chem.MolFromSmiles(smile):
-            errors.add('Data includes an invalid SMILES.')
-
-    # Validate targets
-    num_tasks_set = set(len(mol_targets) for mol_targets in targets)
-
-    if len(num_tasks_set) != 1:
-        errors.add('Inconsistent number of tasks for each molecule.')
-
-    if len(num_tasks_set) == 1:
-        num_tasks = num_tasks_set.pop()
-        if num_tasks != len(header) - 1:
-            errors.add(
-                'Number of tasks for each molecule doesn\'t match number of'
-                ' tasks in header.')
-
-    unique_targets = set(
-        np.unique([target for mol_targets in targets
-                   for target in mol_targets]))
-
-    if unique_targets <= {''}:
-        errors.add('All targets are missing.')
-
-    for target in unique_targets - {''}:
-        try:
-            float(target)
-        except ValueError:
-            errors.add('Found a target which is not a number.')
-
-    return errors

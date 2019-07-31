@@ -26,6 +26,7 @@ class MoleculeDatapoint:
 
     def __init__(self,
                  smiles: str,
+                 mol: Chem.Mol,
                  targets: np.ndarray,
                  features: np.ndarray = None,
                  features_generator: List[str] = None,
@@ -34,6 +35,7 @@ class MoleculeDatapoint:
         Initializes a MoleculeDatapoint, which contains a single molecule.
 
         :param smiles: Smiles string
+        :param mol: Chem.Mol
         :param targets: A numpy array containing features
         :param features: A numpy array containing additional features
         (e.g. ƒMorgan fingerprint).
@@ -42,7 +44,7 @@ class MoleculeDatapoint:
         name on each line.
         '''
         self.smiles = smiles
-        self.mol = Chem.MolFromSmiles(self.smiles)
+        self.mol = mol
         self.compound_name = compound_name
 
         if features and features_generator:

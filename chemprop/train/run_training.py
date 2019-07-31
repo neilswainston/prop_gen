@@ -60,7 +60,7 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
     # Get data
     debug('Loading data')
     args.task_names = args.data_df.columns
-    data = get_data(args=args, logger=logger)
+    data = get_data(args=args)
     args.num_tasks = data.num_tasks()
     args.features_size = len(args.data_df.columns)
     debug(f'Number of tasks = {args.num_tasks}')

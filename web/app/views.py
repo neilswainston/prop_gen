@@ -1,6 +1,7 @@
 """Defines a number of routes/views for the flask app."""
 
 from argparse import ArgumentParser, Namespace
+import csv
 from functools import wraps
 import io
 import os
@@ -13,6 +14,7 @@ import zipfile
 from flask import json, jsonify, redirect, render_template, request, \
     send_file, send_from_directory, url_for
 from rdkit import Chem
+from tqdm import tqdm
 from typing import Callable, List, Tuple
 from werkzeug.utils import secure_filename
 
@@ -588,3 +590,64 @@ def delete_checkpoint(checkpoint: int):
     """
     db.delete_ckpt(checkpoint)
     return redirect(url_for('checkpoints'))
+
+
+def validate_data(data_path: str) -> Set[str]:
+    """
+    Validates a data CSV file, returning a set of errors.
+
+    :param data_path: Path to a data CSV file.
+    :return: A set of error messages.
+    """
+    errors = set()
+
+    with open(data_path) as f:
+        reader = csv.reader(f)
+        header = next(reader)
+
+        smiles, targets = [], []
+        for line in reader:
+            smiles.append(line[0])
+            targets.append(line[1:])
+
+    # Validate header
+    if not header:
+        errors.add('Empty header')
+    elif len(header) < 2:
+        errors.add('Header must include task names.')
+
+    if Chem.MolFromSmiles(header[0]):
+        errors.add('First row is a SMILES string instead of a header.')
+
+    # Validate smiles
+    for smile in tqdm(smiles, total=len(smiles)):
+        if not Chem.MolFromSmiles(smile):
+            errors.add('Data includes an invalid SMILES.')
+
+    # Validate targets
+    num_tasks_set = set(len(mol_targets) for mol_targets in targets)
+
+    if len(num_tasks_set) != 1:
+        errors.add('Inconsistent number of tasks for each molecule.')
+
+    if len(num_tasks_set) == 1:
+        num_tasks = num_tasks_set.pop()
+        if num_tasks != len(header) - 1:
+            errors.add(
+                'Number of tasks for each molecule doesn\'t match number of'
+                ' tasks in header.')
+
+    unique_targets = set(
+        np.unique([target for mol_targets in targets
+                   for target in mol_targets if target]))
+
+    if not unique_targets:
+        errors.add('All targets are missing.')
+
+    for target in unique_targets:
+        try:
+            float(target)
+        except ValueError:
+            errors.add('Found a target which is not a number.')
+
+    return errors
