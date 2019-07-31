@@ -15,10 +15,10 @@ from logging import Logger
 import os
 import pickle
 import random
+from typing import List, Set, Tuple
 
 from rdkit import Chem
 from tqdm import tqdm
-from typing import List, Set, Tuple
 
 from chemprop.features import load_features
 import numpy as np
@@ -129,7 +129,8 @@ def get_data_from_smiles(smiles: List[str], skip_invalid_smiles: bool=True,
     """
     debug = logger.debug if logger is not None else print
 
-    data = MoleculeDataset([MoleculeDatapoint([smile]) for smile in smiles])
+    data = MoleculeDataset([MoleculeDatapoint(smile, None)
+                            for smile in smiles])
 
     # Filter out invalid SMILES
     if skip_invalid_smiles:
@@ -288,11 +289,9 @@ def validate_data(data_path: str) -> Set[str]:
     """
     errors = set()
 
-    header = get_header(data_path)
-
     with open(data_path) as f:
         reader = csv.reader(f)
-        next(reader)  # Skip header
+        header = next(reader)
 
         smiles, targets = [], []
         for line in reader:
@@ -305,18 +304,17 @@ def validate_data(data_path: str) -> Set[str]:
     elif len(header) < 2:
         errors.add('Header must include task names.')
 
-    mol = Chem.MolFromSmiles(header[0])
-    if mol is not None:
+    if Chem.MolFromSmiles(header[0]):
         errors.add('First row is a SMILES string instead of a header.')
 
     # Validate smiles
     for smile in tqdm(smiles, total=len(smiles)):
-        mol = Chem.MolFromSmiles(smile)
-        if mol is None:
+        if not Chem.MolFromSmiles(smile):
             errors.add('Data includes an invalid SMILES.')
 
     # Validate targets
     num_tasks_set = set(len(mol_targets) for mol_targets in targets)
+
     if len(num_tasks_set) != 1:
         errors.add('Inconsistent number of tasks for each molecule.')
 
