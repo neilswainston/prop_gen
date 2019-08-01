@@ -1,3 +1,8 @@
+'''
+(c) University of Liverpool 2019
+
+All rights reserved.
+'''
 from argparse import Namespace
 import csv
 
@@ -7,14 +12,16 @@ from typing import List, Optional
 
 from chemprop.data import MoleculeDataset
 from chemprop.data.utils import get_data, get_data_from_smiles
+from chemprop.models.utils import load_args, load_checkpoint, load_scalers
 from chemprop.train.predict import predict
-from chemprop.utils import load_args, load_checkpoint, load_scalers
 import numpy as np
 
 
-def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional[List[float]]]:
+def make_predictions(args: Namespace, smiles: List[str] = None) \
+        -> List[Optional[List[float]]]:
     """
-    Makes predictions. If smiles is provided, makes predictions on smiles. Otherwise makes predictions on args.test_data.
+    Makes predictions. If smiles is provided, makes predictions on smiles.
+    Otherwise makes predictions on args.test_data.
 
     :param args: Arguments.
     :param smiles: Smiles to make predictions on.
@@ -38,7 +45,8 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
             smiles=smiles, skip_invalid_smiles=False)
     else:
         test_data = get_data(path=args.test_path, args=args,
-                             use_compound_names=args.use_compound_names, skip_invalid_smiles=False)
+                             use_compound_names=args.use_compound_names,
+                             skip_invalid_smiles=False)
 
     print('Validating SMILES')
     valid_indices = [i for i in range(
@@ -47,7 +55,7 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
     test_data = MoleculeDataset([test_data[i] for i in valid_indices])
 
     # Edge case if empty list of smiles is provided
-    if len(test_data) == 0:
+    if not test_data:
         return [None] * len(full_data)
 
     if args.use_compound_names:
@@ -66,7 +74,8 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
         sum_preds = np.zeros((len(test_data), args.num_tasks))
     print(
         f'Predicting with an ensemble of {len(args.checkpoint_paths)} models')
-    for checkpoint_path in tqdm(args.checkpoint_paths, total=len(args.checkpoint_paths)):
+    for checkpoint_path in tqdm(args.checkpoint_paths,
+                                total=len(args.checkpoint_paths)):
         # Load model
         model = load_checkpoint(checkpoint_path, cuda=args.cuda)
         model_preds = predict(
@@ -140,7 +149,8 @@ def make_predictions(args: Namespace, smiles: List[str] = None) -> List[Optional
 def predict_smile(checkpoint_path: str, smile: str):
     smiles = [smile]
     """
-        Makes predictions. If smiles is provided, makes predictions on smiles. Otherwise makes predictions on args.test_data.
+        Makes predictions. If smiles is provided, makes predictions on smiles.
+        Otherwise makes predictions on args.test_data.
 
         :param args: Arguments.
         :param smiles: Smiles to make predictions on.

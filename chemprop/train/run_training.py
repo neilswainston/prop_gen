@@ -24,10 +24,11 @@ from typing import List
 
 from chemprop.data.utils import get_class_sizes, get_data
 from chemprop.models import build_model
+from chemprop.models.utils import build_lr_scheduler, \
+    get_loss_func, get_metric_func, load_checkpoint, save_checkpoint
 from chemprop.nn_utils import param_count
 from chemprop.plot_utils import plot
-from chemprop.utils import build_lr_scheduler, \
-    get_loss_func, get_metric_func, load_checkpoint, makedirs, save_checkpoint
+from chemprop.utils import makedirs
 import numpy as np
 
 from .evaluate import evaluate, evaluate_predictions
