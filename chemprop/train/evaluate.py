@@ -1,10 +1,12 @@
 import logging
+
+from sklearn.preprocessing.data import StandardScaler
 from typing import Callable, List
 
+from chemprop.data import MoleculeDataset
 import torch.nn as nn
 
 from .predict import predict
-from chemprop.data import MoleculeDataset, StandardScaler
 
 
 def evaluate_predictions(preds: List[List[float]],

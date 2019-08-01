@@ -1,25 +1,24 @@
+from argparse import Namespace
 import logging
 import math
 import os
-from typing import Callable, List, Tuple, Union
-from argparse import Namespace
 
-from sklearn.metrics import auc, mean_absolute_error, mean_squared_error, precision_recall_curve, r2_score,\
-    roc_auc_score, accuracy_score, log_loss
+from sklearn.metrics import auc, mean_absolute_error, mean_squared_error, \
+    precision_recall_curve, r2_score, roc_auc_score, accuracy_score, log_loss
+from sklearn.preprocessing.data import StandardScaler
 import torch
-import torch.nn as nn
 from torch.optim import Adam, Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
+from typing import Callable, List, Tuple, Union
 
-from chemprop.data import StandardScaler
 from chemprop.models import build_model, MoleculeModel
 from chemprop.nn_utils import NoamLR
-
-## Import Adaptive Loss Function
-from robust_loss_pytorch import adaptive
 import numpy as np
+from robust_loss_pytorch import adaptive
+import torch.nn as nn
 
 
+# Import Adaptive Loss Function
 def makedirs(path: str, isfile: bool = False):
     """
     Creates a directory given a path to either a directory or file.
@@ -98,7 +97,8 @@ def load_checkpoint(path: str,
     for param_name in loaded_state_dict.keys():
 
         if param_name not in model_state_dict:
-            debug(f'Pretrained parameter "{param_name}" cannot be found in model parameters.')
+            debug(
+                f'Pretrained parameter "{param_name}" cannot be found in model parameters.')
         elif model_state_dict[param_name].shape != loaded_state_dict[param_name].shape:
             debug(f'Pretrained parameter "{param_name}" '
                   f'of shape {loaded_state_dict[param_name].shape} does not match corresponding '
@@ -168,11 +168,11 @@ def get_loss_func(args: Namespace) -> nn.Module:
 
     if args.dataset_type == 'regression':
         return nn.MSELoss(reduction='none')
-    
+
     if args.dataset_type == 'multiclass':
         return nn.CrossEntropyLoss(reduction='none')
 
-    #todo: change the loss function here
+    # todo: change the loss function here
     if args.dataset_type == 'dopamine':
         # return quantile_loss_func(0.75)
         # return quantile_loss_func(0.7)
@@ -184,36 +184,36 @@ def get_loss_func(args: Namespace) -> nn.Module:
 
 def quantile_loss_func(alpha):
 
-    def foo(preds,targets):
+    def foo(preds, targets):
         d = (preds - targets)
         return ((d ** 2) * (alpha + torch.sign(d)) ** 2).mean()
     return foo
 
     # return d**2
 
+
 def adaptive_loss_func():
 
-    def loss_func(preds,targets):
-        adaptive_lossfun = adaptive.AdaptiveLossFunction(1, np.float32,'cuda')
-        d = torch.as_tensor(preds-targets)
+    def loss_func(preds, targets):
+        adaptive_lossfun = adaptive.AdaptiveLossFunction(1, np.float32, 'cuda')
+        d = torch.as_tensor(preds - targets)
         loss = torch.sum(adaptive_lossfun.lossfun(d))
         return loss
 
     return loss_func
 
+
 def simple_heteroscedastic_loss_func():
 
-    def loss_func(preds,targets):
+    def loss_func(preds, targets):
         # l = (preds-targets)**2
         # l=l/targets
         # return torch.mean(l)
-        w = ((100.0-1.0)/(0.059-1000000.0))*(targets-1.0) + 1.0
-        l = ((preds-targets)**2)*w
+        w = ((100.0 - 1.0) / (0.059 - 1000000.0)) * (targets - 1.0) + 1.0
+        l = ((preds - targets)**2) * w
         return torch.mean(l)
 
-
     return loss_func
-
 
 
 def prc_auc(targets: List[int], preds: List[float]) -> float:
@@ -249,10 +249,11 @@ def accuracy(targets: List[int], preds: List[float], threshold: float = 0.5) -> 
     :param threshold: The threshold above which a prediction is a 1 and below which (inclusive) a prediction is a 0
     :return: The computed accuracy.
     """
-    if type(preds[0]) == list: # multiclass
+    if type(preds[0]) == list:  # multiclass
         hard_preds = [p.index(max(p)) for p in preds]
     else:
-        hard_preds = [1 if p > threshold else 0 for p in preds] # binary prediction
+        # binary prediction
+        hard_preds = [1 if p > threshold else 0 for p in preds]
     return accuracy_score(targets, hard_preds)
 
 
@@ -277,10 +278,10 @@ def get_metric_func(metric: str) -> Callable[[Union[List[int], List[float]], Lis
 
     if metric == 'r2':
         return r2_score
-    
+
     if metric == 'accuracy':
         return accuracy
-    
+
     if metric == 'cross_entropy':
         return log_loss
 
@@ -295,7 +296,8 @@ def build_optimizer(model: nn.Module, args: Namespace) -> Optimizer:
     :param args: Arguments.
     :return: An initialized Optimizer.
     """
-    params = [{'params': model.parameters(), 'lr': args.init_lr, 'weight_decay': 0}]
+    params = [{'params': model.parameters(), 'lr': args.init_lr,
+               'weight_decay': 0}]
 
     return Adam(params)
 

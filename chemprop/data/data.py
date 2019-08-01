@@ -9,13 +9,12 @@ All rights reserved.
 import random
 
 from rdkit import Chem
+from sklearn.preprocessing.data import StandardScaler
 from torch.utils.data.dataset import Dataset
 from typing import Callable, List, Union
 
 from chemprop.features import get_features_generator
 import numpy as np
-
-from .scaler import StandardScaler
 
 
 class MoleculeDatapoint:
@@ -180,8 +179,8 @@ class MoleculeDataset(Dataset):
 
         random.shuffle(self.data)
 
-    def normalize_features(self, scaler: StandardScaler=None,
-                           replace_nan_token: int=0) -> StandardScaler:
+    def normalize_features(self, scaler: StandardScaler=None) \
+            -> StandardScaler:
         '''
         Normalizes the features of the dataset using a StandardScaler
         (subtract mean, divide by standard deviation).
@@ -200,7 +199,7 @@ class MoleculeDataset(Dataset):
             return None
 
         if not scaler:
-            scaler = StandardScaler(replace_nan_token=replace_nan_token)
+            scaler = StandardScaler()
 
         features = np.vstack([d.features for d in self.data])
         scaler.fit(features)

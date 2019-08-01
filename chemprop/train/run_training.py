@@ -15,13 +15,13 @@ import os
 import pickle
 from pprint import pformat
 
+from sklearn.preprocessing.data import StandardScaler
 from tensorboardX import SummaryWriter
 import torch
 from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import trange
 from typing import List
 
-from chemprop.data import StandardScaler
 from chemprop.data.utils import get_class_sizes, get_data
 from chemprop.models import build_model
 from chemprop.nn_utils import param_count
@@ -29,6 +29,7 @@ from chemprop.utils import build_optimizer, build_lr_scheduler, \
     get_loss_func, get_metric_func, load_checkpoint, makedirs, save_checkpoint
 import matplotlib.pyplot as plt
 import numpy as np
+
 from .evaluate import evaluate, evaluate_predictions
 from .predict import predict
 from .train import train

@@ -1,10 +1,10 @@
+from sklearn.preprocessing.data import StandardScaler
+import torch
+from tqdm import trange
 from typing import List
 
-import torch
+from chemprop.data import MoleculeDataset
 import torch.nn as nn
-from tqdm import trange
-
-from chemprop.data import MoleculeDataset, StandardScaler
 
 
 def predict(model: nn.Module,

@@ -10,8 +10,8 @@ All rights reserved.
 # pylint: disable=too-many-statements
 # pylint: disable=wrong-import-order
 from argparse import Namespace
-
 from logging import Logger
+
 from rdkit import Chem
 from typing import List, Tuple
 
