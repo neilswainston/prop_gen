@@ -28,6 +28,7 @@ def cross_validate(args: Namespace, logger: Logger=None) \
 
     # Run training on different random seeds for each fold
     all_scores = []
+
     for fold_num in range(args.num_folds):
         info(f'Fold {fold_num}')
         args.seed = init_seed + fold_num
@@ -35,6 +36,7 @@ def cross_validate(args: Namespace, logger: Logger=None) \
         makedirs(args.save_dir)
         model_scores = run_training(args, logger)
         all_scores.append(model_scores)
+
     all_scores = np.array(all_scores)
 
     # Report results

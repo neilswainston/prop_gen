@@ -22,20 +22,18 @@ from tqdm import trange
 from typing import List
 
 from chemprop.data import StandardScaler
-from chemprop.data.utils import get_class_sizes, get_data, split_data
+from chemprop.data.utils import get_class_sizes, get_data
 from chemprop.models import build_model
 from chemprop.nn_utils import param_count
 from chemprop.utils import build_optimizer, build_lr_scheduler, \
     get_loss_func, get_metric_func, load_checkpoint, makedirs, save_checkpoint
 import matplotlib.pyplot as plt
 import numpy as np
-
 from .evaluate import evaluate, evaluate_predictions
 from .predict import predict
 from .train import train
 
 
-# Matplotlib
 def run_training(args: Namespace, logger: Logger = None) -> List[float]:
     """
     Trains a model and returns test scores on the model checkpoint with the
@@ -54,52 +52,11 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
     if args.gpu:
         torch.cuda.set_device(args.gpu)
 
+    # Get data:
+    train_data, val_data, test_data = get_data(args, logger)
+
     # Print args
     debug(pformat(vars(args)))
-
-    # Get data
-    debug('Loading data')
-    args.task_names = args.data_df.columns
-    data = get_data(args=args)
-    args.num_tasks = data.num_tasks()
-    args.features_size = len(args.data_df.columns)
-    debug(f'Number of tasks = {args.num_tasks}')
-
-    # Split data
-    debug(f'Splitting data with seed {args.seed}')
-    if args.separate_test_path:
-        test_data = get_data(path=args.separate_test_path, args=args,
-                             features_path=args.separate_test_features_path,
-                             logger=logger)
-    if args.separate_val_path:
-        val_data = get_data(path=args.separate_val_path, args=args,
-                            features_path=args.separate_val_features_path,
-                            logger=logger)
-
-    if args.separate_val_path and args.separate_test_path:
-        train_data = data
-    elif args.separate_val_path:
-        train_data, _, test_data = split_data(data=data,
-                                              split_type=args.split_type,
-                                              sizes=(0.8, 0.2, 0.0),
-                                              seed=args.seed,
-                                              args=args,
-                                              logger=logger)
-    elif args.separate_test_path:
-        train_data, val_data, _ = split_data(data=data,
-                                             split_type=args.split_type,
-                                             sizes=(0.8, 0.2, 0.0),
-                                             seed=args.seed,
-                                             args=args,
-                                             logger=logger)
-    else:
-        train_data, val_data, test_data = split_data(
-            data=data,
-            split_type=args.split_type,
-            sizes=args.split_sizes,
-            seed=args.seed,
-            args=args,
-            logger=logger)
 
     if args.dataset_type == 'classification':
         class_sizes = get_class_sizes(args.data_df)
@@ -151,8 +108,7 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
 
     args.train_data_size = len(train_data)
 
-    debug(f'Total size = {len(data):,} | '
-          f'train size = {len(train_data):,} | val size = {len(val_data):,} |'
+    debug(f'train size = {len(train_data):,} | val size = {len(val_data):,} |'
           f' test size = {len(test_data):,}')
 
     # Initialize scaler and scale training targets by subtracting mean and
