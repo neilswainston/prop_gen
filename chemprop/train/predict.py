@@ -1,3 +1,8 @@
+'''
+(c) University of Liverpool 2019
+
+All rights reserved.
+'''
 from sklearn.preprocessing.data import StandardScaler
 import torch
 from tqdm import trange

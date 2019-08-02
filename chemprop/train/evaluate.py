@@ -1,3 +1,10 @@
+'''
+(c) University of Liverpool 2019
+
+All rights reserved.
+'''
+# pylint: disable=too-many-arguments
+# pylint: disable=wrong-import-order
 import logging
 
 from sklearn.preprocessing.data import StandardScaler
@@ -15,42 +22,52 @@ def evaluate_predictions(preds: List[List[float]],
                          metric_func: Callable,
                          dataset_type: str,
                          logger: logging.Logger = None) -> List[float]:
-    """
-    Evaluates predictions using a metric function and filtering out invalid targets.
+    '''
+    Evaluates predictions using a metric function and filtering out invalid
+    targets.
 
-    :param preds: A list of lists of shape (data_size, num_tasks) with model predictions.
-    :param targets: A list of lists of shape (data_size, num_tasks) with targets.
+    :param preds: A list of lists of shape (data_size, num_tasks) with model
+    predictions.
+    :param targets: A list of lists of shape (data_size, num_tasks) with
+    targets.
     :param num_tasks: Number of tasks.
-    :param metric_func: Metric function which takes in a list of targets and a list of predictions.
+    :param metric_func: Metric function which takes in a list of targets and a
+    list of predictions.
     :param dataset_type: Dataset type.
     :param logger: Logger.
     :return: A list with the score for each task based on `metric_func`.
-    """
+    '''
     info = logger.info if logger is not None else print
 
-    if len(preds) == 0:
+    if not preds:
         return [float('nan')] * num_tasks
 
     # Filter out empty targets
     # valid_preds and valid_targets have shape (num_tasks, data_size)
     valid_preds = [[] for _ in range(num_tasks)]
     valid_targets = [[] for _ in range(num_tasks)]
+
     for i in range(num_tasks):
-        for j in range(len(preds)):
-            if targets[j][i] is not None:  # Skip those without targets
-                valid_preds[i].append(preds[j][i])
+        for j, pred in enumerate(preds):
+            if targets[j][i]:  # Skip those without targets
+                valid_preds[i].append(pred[i])
                 valid_targets[i].append(targets[j][i])
 
-    # Compute metric
+    # Compute metric:
     results = []
+
     for i in range(num_tasks):
-        # # Skip if all targets or preds are identical, otherwise we'll crash during classification
+        # Skip if all targets or preds are identical, otherwise we'll crash
+        # during classification
         if dataset_type == 'classification':
             nan = False
-            if all(target == 0 for target in valid_targets[i]) or all(target == 1 for target in valid_targets[i]):
+            if all(target == 0 for target in valid_targets[i]) \
+                    or all(target == 1 for target in valid_targets[i]):
                 nan = True
                 info('Warning: Found a task with targets all 0s or all 1s')
-            if all(pred == 0 for pred in valid_preds[i]) or all(pred == 1 for pred in valid_preds[i]):
+
+            if all(pred == 0 for pred in valid_preds[i]) \
+                    or all(pred == 1 for pred in valid_preds[i]):
                 nan = True
                 info('Warning: Found a task with predictions all 0s or all 1s')
 
@@ -58,7 +75,7 @@ def evaluate_predictions(preds: List[List[float]],
                 results.append(float('nan'))
                 continue
 
-        if len(valid_targets[i]) == 0:
+        if not valid_targets[i]:
             continue
 
         results.append(metric_func(valid_targets[i], valid_preds[i]))
@@ -74,19 +91,20 @@ def evaluate(model: nn.Module,
              dataset_type: str,
              scaler: StandardScaler = None,
              logger: logging.Logger = None) -> List[float]:
-    """
+    '''
     Evaluates an ensemble of models on a dataset.
 
     :param model: A model.
     :param data: A MoleculeDataset.
     :param num_tasks: Number of tasks.
-    :param metric_func: Metric function which takes in a list of targets and a list of predictions.
+    :param metric_func: Metric function which takes in a list of targets and a
+    list of predictions.
     :param batch_size: Batch size.
     :param dataset_type: Dataset type.
     :param scaler: A StandardScaler object fit on the training targets.
     :param logger: Logger.
     :return: A list with the score for each task based on `metric_func`.
-    """
+    '''
     preds = predict(
         model=model,
         data=data,

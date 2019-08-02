@@ -1,3 +1,8 @@
+'''
+(c) University of Liverpool 2019
+
+All rights reserved.
+'''
 from .cross_validate import cross_validate
 from .evaluate import evaluate, evaluate_predictions
 from .make_predictions import make_predictions
