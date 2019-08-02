@@ -11,6 +11,7 @@ from sklearn.preprocessing.data import StandardScaler
 from typing import Callable, List
 
 from chemprop.data import MoleculeDataset
+import numpy as np
 import torch.nn as nn
 
 from .predict import predict
@@ -49,7 +50,7 @@ def evaluate_predictions(preds: List[List[float]],
 
     for i in range(num_tasks):
         for j, pred in enumerate(preds):
-            if targets[j][i]:  # Skip those without targets
+            if not np.isnan(targets[j][i]):  # Skip those without targets
                 valid_preds[i].append(pred[i])
                 valid_targets[i].append(targets[j][i])
 

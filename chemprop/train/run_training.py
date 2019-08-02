@@ -5,6 +5,7 @@ All rights reserved.
 '''
 # pylint: disable=fixme
 # pylint: disable=invalid-name
+# pylint: disable=too-many-arguments
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
@@ -14,7 +15,7 @@ from logging import Logger
 import os
 from pprint import pformat
 
-from sklearn.preprocessing.data import StandardScaler
+
 from tensorboardX import SummaryWriter
 import torch
 from torch.optim import Adam
@@ -22,7 +23,7 @@ from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import trange
 from typing import List
 
-from chemprop.data.utils import get_class_sizes, get_data
+from chemprop.data.utils import get_data
 from chemprop.models import build_model
 from chemprop.models.utils import build_lr_scheduler, \
     get_loss_func, get_metric_func, load_checkpoint, save_checkpoint
@@ -57,33 +58,8 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
     if args.gpu:
         torch.cuda.set_device(args.gpu)
 
-    # Get data:
-    train_data, val_data, test_data = get_data(args, logger)
-
-    debug(f'train size = {len(train_data):,} | val size = {len(val_data):,} |'
-          f' test size = {len(test_data):,}')
-
-    if args.dataset_type == 'classification':
-        class_sizes = get_class_sizes(args.data_df)
-        debug('Class sizes')
-        debug(class_sizes)
-
-    if args.features_scaling:
-        features_scaler = train_data.normalize_features()
-        val_data.normalize_features(features_scaler)
-        test_data.normalize_features(features_scaler)
-    else:
-        features_scaler = None
-
-    # Initialise scaler and scale training targets by subtracting mean and
-    # dividing standard deviation (regression only):
-    if args.dataset_type == 'regression':
-        debug('Fitting scaler')
-        scaler = StandardScaler()
-        targets = scaler.fit_transform(train_data.targets())
-        train_data.smiles().set_targets(targets.tolist())
-    else:
-        scaler = None
+    train_data, val_data, test_data, scaler, features_scaler = \
+        get_data(args, logger, debug)
 
     # Set up test set evaluation:
     test_targets = test_data.targets()
@@ -131,87 +107,11 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
             debug('Moving model to cuda')
             model = model.cuda()
 
-        # Ensure that model is saved in correct location for evaluation if 0
-        # epochs:
-        save_checkpoint(os.path.join(save_dir, 'model.pt'),
-                        model, scaler, features_scaler, args)
-
-        # Optimizers:
-        optimizer = Adam([{'params': model.parameters(),
-                           'lr': args.init_lr,
-                           'weight_decay': 0}])
-
-        # Learning rate schedulers:
-        scheduler = build_lr_scheduler(optimizer,
-                                       warmup_epochs=args.warmup_epochs,
-                                       train_data_size=len(train_data),
-                                       batch_size=args.batch_size,
-                                       init_lr=args.init_lr,
-                                       max_lr=args.max_lr,
-                                       epochs=args.epochs,
-                                       num_lrs=args.num_lrs,
-                                       final_lr=args.final_lr)
-
-        # Run training:
-        best_score = float('inf') if args.minimize_score else -float('inf')
-
-        best_epoch = 0
-        n_iter = 0
-
-        for epoch in trange(args.epochs):
-            debug(f'Epoch {epoch}')
-
-            n_iter = train(
-                model=model,
-                data=train_data,
-                loss_func=get_loss_func(args.dataset_type),
-                optimizer=optimizer,
-                scheduler=scheduler,
-                args=args,
-                n_iter=n_iter,
-                logger=logger,
-                writer=writer
-            )
-
-            if isinstance(scheduler, ExponentialLR):
-                scheduler.step()
-
-            val_scores = evaluate(
-                model=model,
-                data=val_data,
-                num_tasks=args.num_tasks,
-                metric_func=get_metric_func(metric=args.metric),
-                batch_size=args.batch_size,
-                dataset_type=args.dataset_type,
-                scaler=scaler,
-                logger=logger
-            )
-
-            # Average validation score:
-            avg_val_score = np.nanmean(val_scores)
-            debug(f'Validation {args.metric} = {avg_val_score:.6f}')
-
-            writer.add_scalar(
-                f'validation_{args.metric}', avg_val_score, n_iter)
-
-            if args.show_individual_scores:
-                # Individual validation scores:
-                for task_name, val_score in zip(args.task_names, val_scores):
-                    debug(
-                        f'Validation {task_name} {args.metric} ='
-                        f' {val_score:.6f}')
-
-                    writer.add_scalar(
-                        f'validation_{task_name}_{args.metric}', val_score,
-                        n_iter)
-
-            # Save model checkpoint if improved validation score:
-            if args.minimize_score and avg_val_score < best_score or \
-                    not args.minimize_score and avg_val_score > best_score:
-                best_score, best_epoch = avg_val_score, epoch
-
-                save_checkpoint(os.path.join(save_dir, 'model.pt'),
-                                model, scaler, features_scaler, args)
+        best_score, best_epoch, n_iter = _train(args, model,
+                                                train_data, val_data,
+                                                scaler, features_scaler,
+                                                save_dir, writer,
+                                                logger, debug)
 
         # Evaluate on test set using model with best validation score:
         info(
@@ -307,3 +207,89 @@ def run_training(args: Namespace, logger: Logger = None) -> List[float]:
                 f' {ensemble_score:.6f}')
 
     return ensemble_scores
+
+
+def _train(args, model, train_data, val_data, scaler, features_scaler,
+           save_dir, writer, logger, debug):
+    '''Train.'''
+    # Run training:
+    best_score = float('inf') if args.minimize_score else -float('inf')
+
+    best_epoch = 0
+    n_iter = 0
+
+    # Optimizers:
+    optimizer = Adam([{'params': model.parameters(),
+                       'lr': args.init_lr,
+                       'weight_decay': 0}])
+
+    # Learning rate schedulers:
+    scheduler = build_lr_scheduler(optimizer,
+                                   warmup_epochs=args.warmup_epochs,
+                                   train_data_size=len(train_data),
+                                   batch_size=args.batch_size,
+                                   init_lr=args.init_lr,
+                                   max_lr=args.max_lr,
+                                   epochs=args.epochs,
+                                   num_lrs=args.num_lrs,
+                                   final_lr=args.final_lr)
+
+    for epoch in trange(args.epochs):
+        debug(f'Epoch {epoch}')
+
+        n_iter = train(
+            model=model,
+            data=train_data,
+            loss_func=get_loss_func(args.dataset_type),
+            optimizer=optimizer,
+            scheduler=scheduler,
+            args=args,
+            n_iter=n_iter,
+            logger=logger,
+            writer=writer
+        )
+
+        if isinstance(scheduler, ExponentialLR):
+            scheduler.step()
+
+        val_scores = evaluate(
+            model=model,
+            data=val_data,
+            num_tasks=args.num_tasks,
+            metric_func=get_metric_func(metric=args.metric),
+            batch_size=args.batch_size,
+            dataset_type=args.dataset_type,
+            scaler=scaler,
+            logger=logger
+        )
+
+        # Average validation score:
+        avg_val_score = np.nanmean(val_scores)
+        debug(f'Validation {args.metric} = {avg_val_score:.6f}')
+
+        writer.add_scalar(
+            f'validation_{args.metric}', avg_val_score, n_iter)
+
+        # Individual validation scores:
+        for task_name, val_score in zip(args.task_names, val_scores):
+            debug(
+                f'Validation {task_name} {args.metric} ='
+                f' {val_score:.6f}')
+
+            writer.add_scalar(
+                f'validation_{task_name}_{args.metric}', val_score,
+                n_iter)
+
+        # Save model checkpoint if improved validation score:
+        if args.minimize_score and avg_val_score < best_score or \
+                not args.minimize_score and avg_val_score > best_score:
+            best_score, best_epoch = avg_val_score, epoch
+
+            save_checkpoint(os.path.join(save_dir, 'model.pt'),
+                            model, scaler, features_scaler, args)
+
+    # Ensure model is saved in correct location for evaluation if 0 epochs:
+    save_checkpoint(os.path.join(save_dir, 'model.pt'),
+                    model, scaler, features_scaler, args)
+
+    return best_score, best_epoch, n_iter

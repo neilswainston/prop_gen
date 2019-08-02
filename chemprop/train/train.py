@@ -3,6 +3,8 @@
 
 All rights reserved.
 '''
+# pylint: disable=ungrouped-imports
+# pylint: disable=wrong-import-order
 from argparse import Namespace
 import logging
 
@@ -15,6 +17,7 @@ from typing import Callable, List, Union
 
 from chemprop.data import MoleculeDataset
 from chemprop.nn_utils import compute_gnorm, compute_pnorm, NoamLR
+import numpy as np
 import torch.nn as nn
 
 
@@ -31,15 +34,15 @@ def train(model: nn.Module,
     Trains a model for an epoch.
 
     :param model: Model.
-    :param data: A MoleculeDataset (or a list of MoleculeDatasets if using moe).
+    :param data: A MoleculeDataset (or list of MoleculeDatasets if using moe).
     :param loss_func: Loss function.
     :param optimizer: An Optimizer.
     :param scheduler: A learning rate scheduler.
     :param args: Arguments.
-    :param n_iter: The number of iterations (training examples) trained on so far.
+    :param n_iter: Number of iterations (training examples) trained on so far.
     :param logger: A logger for printing intermediate results.
     :param writer: A tensorboardX SummaryWriter.
-    :return: The total number of iterations (training examples) trained on so far.
+    :return: Total number of iterations (training examples) trained on so far.
     """
     debug = logger.debug if logger is not None else print
 
@@ -58,14 +61,17 @@ def train(model: nn.Module,
         # Prepare batch
         if i + args.batch_size > len(data):
             break
+
         mol_batch = MoleculeDataset(data[i:i + args.batch_size])
-        smiles_batch, features_batch, target_batch = mol_batch.smiles(
-        ), mol_batch.features(), mol_batch.targets()
-        batch = smiles_batch
-        mask = torch.Tensor([[x is not None for x in tb]
+
+        smiles_batch, features_batch, target_batch = \
+            mol_batch.smiles(), mol_batch.features(), mol_batch.targets()
+
+        mask = torch.Tensor([[not np.isnan(x) for x in tb]
                              for tb in target_batch])
-        targets = torch.Tensor(
-            [[0 if x is None else x for x in tb] for tb in target_batch])
+
+        targets = torch.Tensor([[0 if np.isnan(x) else x for x in tb]
+                                for tb in target_batch])
 
         if next(model.parameters()).is_cuda:
             mask, targets = mask.cuda(), targets.cuda()
@@ -77,16 +83,19 @@ def train(model: nn.Module,
 
         # Run model
         model.zero_grad()
-        preds = model(batch, features_batch)
+        preds = model(smiles_batch, features_batch)
 
         # todo: change the loss function for property  prediction tasks
 
         if args.dataset_type == 'multiclass':
             targets = targets.long()
-            loss = torch.cat([loss_func(preds[:, target_index, :], targets[:, target_index]).unsqueeze(
-                1) for target_index in range(preds.size(1))], dim=1) * class_weights * mask
+            loss = torch.cat([loss_func(preds[:, target_index, :],
+                                        targets[:, target_index]).unsqueeze(1)
+                              for target_index in range(preds.size(1))],
+                             dim=1) * class_weights * mask
         else:
             loss = loss_func(preds, targets) * class_weights * mask
+
         loss = loss.sum() / mask.sum()
 
         loss_sum += loss.item()
@@ -111,12 +120,14 @@ def train(model: nn.Module,
             lrs_str = ', '.join(
                 f'lr_{i} = {lr:.4e}' for i, lr in enumerate(lrs))
             debug(
-                f'Loss = {loss_avg:.4e}, PNorm = {pnorm:.4f}, GNorm = {gnorm:.4f}, {lrs_str}')
+                f'Loss = {loss_avg:.4e}, PNorm = {pnorm:.4f},'
+                f' GNorm = {gnorm:.4f}, {lrs_str}')
 
             if writer is not None:
                 writer.add_scalar('train_loss', loss_avg, n_iter)
                 writer.add_scalar('param_norm', pnorm, n_iter)
                 writer.add_scalar('gradient_norm', gnorm, n_iter)
+
                 for i, lr in enumerate(lrs):
                     writer.add_scalar(f'learning_rate_{i}', lr, n_iter)
 

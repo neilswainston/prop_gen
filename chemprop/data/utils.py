@@ -13,6 +13,7 @@ from argparse import Namespace
 from logging import Logger
 
 from rdkit import Chem
+from sklearn.preprocessing.data import StandardScaler
 from typing import List, Tuple
 
 from chemprop.features import load_features
@@ -23,7 +24,41 @@ from .data import MoleculeDatapoint, MoleculeDataset
 from .scaffold import scaffold_split
 
 
-def get_data(args: Namespace, logger: Logger = None):
+def get_data(args, logger, debug):
+    '''Get data.'''
+    # Get data:
+    train_data, val_data, test_data = _get_data(args, logger)
+
+    debug(f'train size = {len(train_data):,} | val size = {len(val_data):,} |'
+          f' test size = {len(test_data):,}')
+
+    if args.dataset_type == 'classification':
+        class_sizes = get_class_sizes(args.data_df)
+        debug('Class sizes')
+        debug(class_sizes)
+
+    # Scale features:
+    if args.features_scaling:
+        features_scaler = train_data.normalize_features()
+        val_data.normalize_features(features_scaler)
+        test_data.normalize_features(features_scaler)
+    else:
+        features_scaler = None
+
+    # Initialise scaler and scale training targets by subtracting mean and
+    # dividing standard deviation (regression only):
+    if args.dataset_type == 'regression':
+        debug('Fitting scaler')
+        scaler = StandardScaler()
+        targets = scaler.fit_transform(train_data.targets())
+        train_data.smiles().set_targets(targets.tolist())
+    else:
+        scaler = None
+
+    return train_data, val_data, test_data, scaler, features_scaler
+
+
+def _get_data(args: Namespace, logger: Logger = None):
     '''Get data.'''
     if logger:
         debug = logger.debug
@@ -32,20 +67,22 @@ def get_data(args: Namespace, logger: Logger = None):
 
     debug('Loading data')
     args.task_names = args.data_df.columns
-    data = _get_data(data_df=args.data_df)
+    data = _get_data_from_df(data_df=args.data_df)
     args.num_tasks = data.num_tasks()
     args.features_size = len(args.data_df.columns)
     debug(f'Number of tasks = {args.num_tasks}')
 
     if args.separate_test_path:
-        test_data = _get_data(data_df=pd.read_csv(args.separate_test_path),
-                              features_path=args.separate_test_features_path)
+        test_data = _get_data_from_df(
+            data_df=pd.read_csv(args.separate_test_path),
+            features_path=args.separate_test_features_path)
     else:
         test_data = None
 
     if args.separate_val_path:
-        val_data = _get_data(data_df=pd.read_csv(args.separate_val_path),
-                             features_path=args.separate_val_features_path)
+        val_data = _get_data_from_df(
+            data_df=pd.read_csv(args.separate_val_path),
+            features_path=args.separate_val_features_path)
     else:
         val_data = None
 
@@ -80,11 +117,11 @@ def get_data(args: Namespace, logger: Logger = None):
                        logger=logger)
 
 
-def _get_data(data_df: pd.DataFrame,
-              skip_invalid_smiles: bool=True,
-              features_path: List[str]=None,
-              features_generator: List[str] = None,
-              max_data_size: int=None) -> MoleculeDataset:
+def _get_data_from_df(data_df: pd.DataFrame,
+                      skip_invalid_smiles: bool=True,
+                      features_path: List[str]=None,
+                      features_generator: List[str] = None,
+                      max_data_size: int=None) -> MoleculeDataset:
     '''
     Gets smiles string and target values (and optionally compound names if
     provided) from a CSV file.
