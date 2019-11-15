@@ -9,16 +9,16 @@ All rights reserved.
 # pylint: disable=ungrouped-imports
 # pylint: disable=wrong-import-order
 import math
-
-import torch
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import _LRScheduler
-from tqdm import trange
 from typing import List, Union
+
+from tqdm import trange
 
 from chemprop.data import MoleculeDataset
 import numpy as np
+import torch
 import torch.nn as nn
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
 
 
 def compute_pnorm(model: nn.Module) -> float:

@@ -7,13 +7,13 @@ All rights reserved.
 # pylint: disable=wrong-import-order
 from argparse import Namespace
 import logging
+from typing import Callable, List, Union
 
 from tensorboardX import SummaryWriter
 import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import trange
-from typing import Callable, List, Union
 
 from chemprop.data import MoleculeDataset
 from chemprop.nn_utils import compute_gnorm, compute_pnorm, NoamLR
@@ -85,7 +85,7 @@ def train(model: nn.Module,
         model.zero_grad()
         preds = model(smiles_batch, features_batch)
 
-        # todo: change the loss function for property  prediction tasks
+        # todo: change the loss function for property prediction tasks
 
         if args.dataset_type == 'multiclass':
             targets = targets.long()
@@ -120,7 +120,7 @@ def train(model: nn.Module,
             lrs_str = ', '.join(
                 f'lr_{i} = {lr:.4e}' for i, lr in enumerate(lrs))
             debug(
-                f'Loss = {loss_avg:.4e}, PNorm = {pnorm:.4f},'
+                f'\nLoss = {loss_avg:.4e}, PNorm = {pnorm:.4f},'
                 f' GNorm = {gnorm:.4f}, {lrs_str}')
 
             if writer is not None:
@@ -128,7 +128,8 @@ def train(model: nn.Module,
                 writer.add_scalar('param_norm', pnorm, n_iter)
                 writer.add_scalar('gradient_norm', gnorm, n_iter)
 
-                for i, lr in enumerate(lrs):
-                    writer.add_scalar(f'learning_rate_{i}', lr, n_iter)
+                for idx, learn_rate in enumerate(lrs):
+                    writer.add_scalar(
+                        f'learning_rate_{idx}', learn_rate, n_iter)
 
     return n_iter

@@ -12,7 +12,7 @@ from argparse import ArgumentParser, Namespace
 import json
 import os
 import pickle
-from tempfile import TemporaryDirectory
+import tempfile
 
 import torch
 
@@ -21,16 +21,12 @@ from chemprop.utils import makedirs
 import pandas as pd
 
 
-# Prevents the temporary directory from being deleted upon function return
-global TEMP_DIR
-
-
 def add_predict_args(parser: ArgumentParser):
-    """
+    '''
     Adds predict arguments to an ArgumentParser.
 
     :param parser: An ArgumentParser.
-    """
+    '''
     parser.add_argument('--gpu', type=int,
                         choices=list(range(torch.cuda.device_count())),
                         help='Which GPU to use')
@@ -67,12 +63,12 @@ def add_predict_args(parser: ArgumentParser):
                         help='Maximum number of data points to load')
 
 
-def add_train_args(parser: ArgumentParser):
-    """
+def _add_train_args(parser: ArgumentParser):
+    '''
     Adds training arguments to an ArgumentParser.
 
     :param parser: An ArgumentParser.
-    """
+    '''
     # General arguments
     parser.add_argument('--gpu', type=int,
                         choices=list(range(torch.cuda.device_count())),
@@ -169,8 +165,8 @@ def add_train_args(parser: ArgumentParser):
                              ' training'
                              '(loss is determined by the `dataset_type`'
                              ' argument).'
-                             'Note: Defaults to "auc" for classification and'
-                             ' "rmse" for regression.')
+                             'Note: Defaults to auc for classification and'
+                             ' rmse for regression.')
     parser.add_argument('--quiet', action='store_true', default=False,
                         help='Skip non-essential print statements')
     parser.add_argument('--log_frequency', type=int, default=10,
@@ -239,13 +235,13 @@ def add_train_args(parser: ArgumentParser):
                         ' bonds')
 
 
-def update_checkpoint_args(args: Namespace):
-    """
+def _update_checkpoint_args(args: Namespace):
+    '''
     Walks the checkpoint directory to find all checkpoints, updating
     args.checkpoint_paths and args.ensemble_size.
 
     :param args: Arguments.
-    """
+    '''
     if hasattr(args, 'checkpoint_paths') and args.checkpoint_paths is not None:
         return
 
@@ -270,22 +266,22 @@ def update_checkpoint_args(args: Namespace):
     if args.ensemble_size == 0:
         raise ValueError(
             f'Failed to find any model checkpoints in directory'
-            ' "{args.checkpoint_dir}"')
+            ' {args.checkpoint_dir}')
 
 
-def modify_predict_args(args: Namespace):
-    """
+def _modify_predict_args(args: Namespace):
+    '''
     Modifies and validates predicting args in place.
 
     :param args: Arguments.
-    """
+    '''
     assert args.test_path
     assert args.preds_path
     assert args.checkpoint_dir is not None \
         or args.checkpoint_path is not None \
         or args.checkpoint_paths is not None
 
-    update_checkpoint_args(args)
+    _update_checkpoint_args(args)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     del args.no_cuda
@@ -294,7 +290,7 @@ def modify_predict_args(args: Namespace):
     makedirs(args.preds_path, isfile=True)
 
 
-def parse_predict_args() -> Namespace:
+def _parse_predict_args() -> Namespace:
     '''
     Parse prediction arguments.
 
@@ -303,17 +299,17 @@ def parse_predict_args() -> Namespace:
     parser = ArgumentParser()
     add_predict_args(parser)
     args = parser.parse_args()
-    modify_predict_args(args)
+    _modify_predict_args(args)
 
     return args
 
 
-def modify_train_args(args: Namespace):
-    """
+def _modify_train_args(args: Namespace):
+    '''
     Modifies and validates training arguments in place.
 
     :param args: Arguments.
-    """
+    '''
 
     # Load config file
     if args.config_path:
@@ -326,15 +322,13 @@ def modify_train_args(args: Namespace):
     assert args.dataset_type is not None
 
     args.data_df = pd.read_csv(args.data_path, index_col=0)
-    
-    # TODO: remove duplicate SMILES strings.
-    # del args.data_path
+
+    # TODO: remove duplicate SMILES strings:
 
     if args.save_dir is not None:
         makedirs(args.save_dir)
     else:
-        TEMP_DIR = TemporaryDirectory()
-        args.save_dir = TEMP_DIR.name
+        args.save_dir = tempfile.mkdtemp()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     del args.no_cuda
@@ -350,8 +344,7 @@ def modify_train_args(args: Namespace):
         else:
             args.metric = 'rmse'
 
-    # todo: Change metric for dopamine dataset here
-
+    # Change metric for dopamine dataset here
     if not ((args.dataset_type == 'classification'
              and args.metric in ['auc', 'prc-auc', 'accuracy']) or
             (args.dataset_type == 'regression'
@@ -361,12 +354,12 @@ def modify_train_args(args: Namespace):
             (args.dataset_type == 'multiclass'
              and args.metric in ['cross_entropy', 'accuracy'])):
         raise ValueError(
-            f'Metric "{args.metric}" invalid for dataset type'
-            ' "{args.dataset_type}".')
+            f'Metric {args.metric} invalid for dataset type'
+            ' {args.dataset_type}')
 
     args.minimize_score = args.metric in ['rmse', 'mae', 'cross_entropy']
 
-    update_checkpoint_args(args)
+    _update_checkpoint_args(args)
 
     if args.features_only:
         assert args.features_generator or args.features_path
@@ -399,14 +392,14 @@ def modify_train_args(args: Namespace):
 
 
 def parse_train_args() -> Namespace:
-    """
+    '''
     Parses arguments for training (includes modifying/validating arguments).
 
     :return: A Namespace containing the parsed, modified, and validated args.
-    """
+    '''
     parser = ArgumentParser()
-    add_train_args(parser)
+    _add_train_args(parser)
     args = parser.parse_args()
-    modify_train_args(args)
+    _modify_train_args(args)
 
     return args

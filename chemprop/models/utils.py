@@ -13,6 +13,7 @@ All rights reserved.
 from argparse import Namespace
 import logging
 import math
+from typing import Callable, List, Tuple, Union
 
 from sklearn.metrics import auc, mean_absolute_error, mean_squared_error, \
     precision_recall_curve, r2_score, roc_auc_score, accuracy_score, log_loss
@@ -20,7 +21,6 @@ from sklearn.preprocessing.data import StandardScaler
 import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
-from typing import Callable, List, Tuple, Union
 
 from chemprop.models import build_model, MoleculeModel
 from chemprop.nn_utils import NoamLR
@@ -47,12 +47,12 @@ def save_checkpoint(path: str,
         'args': args,
         'state_dict': model.state_dict(),
         'data_scaler': {
-            'means': scaler.means,
-            'stds': scaler.stds
+            'means': scaler.mean_,
+            'stds': scaler.var_**0.5
         } if scaler else None,
         'features_scaler': {
-            'means': features_scaler.means,
-            'stds': features_scaler.stds
+            'means': features_scaler.mean_,
+            'stds': features_scaler.scaler.var_**0.5
         } if features_scaler else None
     }
     torch.save(state, path)

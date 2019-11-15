@@ -11,10 +11,10 @@ All rights reserved.
 # pylint: disable=wrong-import-order
 from argparse import Namespace
 from logging import Logger
+from typing import List, Tuple
 
 from rdkit import Chem
 from sklearn.preprocessing.data import StandardScaler
-from typing import List, Tuple
 
 from chemprop.features import load_features
 import numpy as np
@@ -51,11 +51,51 @@ def get_data(args, logger, debug):
         debug('Fitting scaler')
         scaler = StandardScaler()
         targets = scaler.fit_transform(train_data.targets())
-        train_data.smiles().set_targets(targets.tolist())
+        train_data.set_targets(targets)
     else:
         scaler = None
 
     return train_data, val_data, test_data, scaler, features_scaler
+
+
+def get_data_from_smiles(smiles: List[str], skip_invalid_smiles: bool=True) \
+        -> MoleculeDataset:
+    '''
+    Converts SMILES to a MoleculeDataset.
+
+    :param smiles: A list of SMILES strings.
+    :param skip_invalid_smiles: Whether to skip and filter out invalid smiles.
+    :param logger: Logger.
+    :return: A MoleculeDataset with all of the provided SMILES.
+    '''
+    data = []
+
+    for smile in smiles:
+        if smile:
+            mol = Chem.MolFromSmiles(smiles)
+
+            if not skip_invalid_smiles or (mol and mol.GetNumHeavyAtoms()):
+                data.append((smile, mol))
+
+    return MoleculeDataset([MoleculeDatapoint(d[0], d[1], None)
+                            for d in data])
+
+
+def get_class_sizes(data_df: pd.DataFrame) -> List[List[float]]:
+    '''
+    Determines the proportions of the different classes in the classification
+    dataset.
+
+    :param data: A Pandas DataFrame
+    :return: A list of lists of class proportions. Each inner list contains the
+    class proportions
+    for a task.
+    '''
+    for col in data_df.columns:
+        assert data_df[col].dropna().isin([0, 1]).all()
+
+    return pd.DataFrame([data_df[col].value_counts(normalize=True)
+                         for col in data_df.columns])
 
 
 def _get_data(args: Namespace, logger: Logger = None):
@@ -174,29 +214,6 @@ def _get_data_from_df(data_df: pd.DataFrame,
     return MoleculeDataset(data)
 
 
-def get_data_from_smiles(smiles: List[str], skip_invalid_smiles: bool=True) \
-        -> MoleculeDataset:
-    '''
-    Converts SMILES to a MoleculeDataset.
-
-    :param smiles: A list of SMILES strings.
-    :param skip_invalid_smiles: Whether to skip and filter out invalid smiles.
-    :param logger: Logger.
-    :return: A MoleculeDataset with all of the provided SMILES.
-    '''
-    data = []
-
-    for smile in smiles:
-        if smile:
-            mol = Chem.MolFromSmiles(smiles)
-
-            if not skip_invalid_smiles or (mol and mol.GetNumHeavyAtoms()):
-                data.append((smile, mol))
-
-    return MoleculeDataset([MoleculeDatapoint(d[0], d[1], None)
-                            for d in data])
-
-
 def _split_data(data: MoleculeDataset,
                 split_type: str = 'random',
                 sizes: Tuple[float, float, float] = (0.8, 0.1, 0.1),
@@ -243,20 +260,3 @@ def _split_random(data: MoleculeDataset,
     test = data[val_size:]
 
     return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
-
-
-def get_class_sizes(data_df: pd.DataFrame) -> List[List[float]]:
-    '''
-    Determines the proportions of the different classes in the classification
-    dataset.
-
-    :param data: A Pandas DataFrame
-    :return: A list of lists of class proportions. Each inner list contains the
-    class proportions
-    for a task.
-    '''
-    for col in data_df.columns:
-        assert data_df[col].dropna().isin([0, 1]).all()
-
-    return pd.DataFrame([data_df[col].value_counts(normalize=True)
-                         for col in data_df.columns])
