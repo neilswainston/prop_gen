@@ -14,14 +14,13 @@ from argparse import Namespace
 from logging import Logger
 import os
 from pprint import pformat
-
+from typing import List
 
 from tensorboardX import SummaryWriter
 import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import trange
-from typing import List
 
 from chemprop.data.utils import get_data
 from chemprop.models import build_model
@@ -265,7 +264,7 @@ def _train(args, model, train_data, val_data, scaler, features_scaler,
 
         # Average validation score:
         avg_val_score = np.nanmean(val_scores)
-        debug(f'Validation {args.metric} = {avg_val_score:.6f}')
+        debug(f'\nValidation {args.metric} = {avg_val_score:.6f}')
 
         writer.add_scalar(
             f'validation_{args.metric}', avg_val_score, n_iter)
