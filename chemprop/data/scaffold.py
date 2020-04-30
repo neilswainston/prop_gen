@@ -10,12 +10,11 @@ import logging
 import random
 from typing import Dict, List, Set, Tuple, Union
 
-from tqdm import tqdm
-
-
-import numpy as np
 from rdkit import Chem
 from rdkit.Chem.Scaffolds import MurckoScaffold
+from tqdm import tqdm
+
+import numpy as np
 
 from .data import MoleculeDataset
 
@@ -111,7 +110,7 @@ def scaffold_split(data: MoleculeDataset,
         index_sets = big_index_sets + small_index_sets
     else:  # Sort from largest to smallest scaffold sets
         index_sets = sorted(list(scaffold_to_indices.values()),
-                            key=lambda index_set: len(index_set),
+                            key=len,
                             reverse=True)
 
     for index_set in index_sets:
